@@ -231,7 +231,7 @@ export default function Clients({ addToast }) {
                   <tbody>
                     {showHistory.quotes.map(q => (
                       <tr key={q.id}>
-                        <td style={{ color: 'var(--primary-400)', fontWeight: 600 }}>{q.quote_number}</td>
+                        <td style={{ color: 'var(--primary-700)', fontWeight: 600 }}>{q.quote_number}</td>
                         <td><span className={`badge ${getStatusClass(q.status)}`}>{q.status}</span></td>
                         <td style={{ fontWeight: 600 }}>${q.total?.toLocaleString()}</td>
                         <td>{q.validity_days} days</td>

@@ -8,7 +8,7 @@ import {
   ResponsiveContainer, Cell
 } from 'recharts'
 
-const CHART_COLORS = ['#10b981', '#06b6d4', '#3b82f6', '#f59e0b', '#a855f7']
+const CHART_COLORS = ['#b91c1c', '#1f2937', '#ef4444', '#6b7280', '#991b1b']
 
 export default function Alerts() {
   const [alerts, setAlerts] = useState({ lowStock: [], expiring: [] })
@@ -221,11 +221,11 @@ export default function Alerts() {
               <div style={{ height: 300 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={valuationData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                     <XAxis
                       type="number"
                       tick={{ fill: '#6b7280', fontSize: 11 }}
-                      axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+                      axisLine={{ stroke: '#e5e7eb' }}
                       tickLine={false}
                       tickFormatter={v => formatCurrency(v)}
                     />
@@ -233,17 +233,18 @@ export default function Alerts() {
                       type="category"
                       dataKey="category"
                       tick={{ fill: '#9ca3af', fontSize: 11 }}
-                      axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+                      axisLine={{ stroke: '#e5e7eb' }}
                       tickLine={false}
                       width={120}
                     />
                     <Tooltip
                       contentStyle={{
-                        background: '#1a2332',
-                        border: '1px solid rgba(255,255,255,0.1)',
+                        background: '#ffffff',
+                        border: '1px solid #e5e7eb',
                         borderRadius: 10,
-                        color: '#f9fafb',
-                        fontSize: 13
+                        color: '#1b1b1b',
+                        fontSize: 13,
+                        boxShadow: '0 4px 14px rgba(0,0,0,0.08)'
                       }}
                       formatter={(val) => [`$${val.toLocaleString()}`, 'Value']}
                     />
@@ -298,7 +299,7 @@ export default function Alerts() {
                   alignItems: 'center'
                 }}>
                   <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Total Inventory Value</span>
-                  <span style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--primary-400)' }}>
+                  <span style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--primary-700)' }}>
                     {formatCurrency(totalValuation)}
                   </span>
                 </div>

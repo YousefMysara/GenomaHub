@@ -169,28 +169,28 @@ export default function Quotations({ addToast }) {
 
     const doc = new jsPDF()
 
-    // Header gradient background
-    doc.setFillColor(10, 15, 26)
+    // Header — clean white with crimson accent
+    doc.setFillColor(255, 255, 255)
     doc.rect(0, 0, 210, 45, 'F')
-    doc.setFillColor(16, 185, 129)
+    doc.setFillColor(185, 28, 28)
     doc.rect(0, 43, 210, 2, 'F')
 
     // Logo text
     doc.setFont('helvetica', 'bold')
-    doc.setTextColor(16, 185, 129)
+    doc.setTextColor(185, 28, 28)
     doc.setFontSize(22)
     doc.text('GenomaHub', 20, 22)
     doc.setFontSize(9)
-    doc.setTextColor(156, 163, 175)
+    doc.setTextColor(100, 100, 100)
     doc.text('Medical & Laboratory Equipment Solutions', 20, 30)
 
     // Quote Number
     doc.setFontSize(12)
-    doc.setTextColor(255, 255, 255)
+    doc.setTextColor(27, 27, 27)
     doc.setFont('helvetica', 'bold')
     doc.text(data.quote_number, 190, 22, { align: 'right' })
     doc.setFontSize(9)
-    doc.setTextColor(156, 163, 175)
+    doc.setTextColor(100, 100, 100)
     doc.text(`Date: ${new Date(data.date_created).toLocaleDateString()}`, 190, 30, { align: 'right' })
     doc.text(`Valid: ${data.validity_days} days`, 190, 36, { align: 'right' })
 
@@ -211,7 +211,7 @@ export default function Quotations({ addToast }) {
     // Status
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(10)
-    const statusColor = { Draft: [107, 114, 128], Sent: [59, 130, 246], Accepted: [16, 185, 129], Rejected: [239, 68, 68] }
+    const statusColor = { Draft: [107, 114, 128], Sent: [37, 99, 235], Accepted: [5, 150, 105], Rejected: [220, 38, 38] }
     const sc = statusColor[data.status] || [107, 114, 128]
     doc.setTextColor(...sc)
     doc.text(`Status: ${data.status}`, 190, 55, { align: 'right' })
@@ -233,7 +233,7 @@ export default function Quotations({ addToast }) {
       head: [['#', 'Code', 'Description', 'Qty', 'Unit Price', 'Disc.', 'Total']],
       body: tableData,
       theme: 'grid',
-      headStyles: { fillColor: [10, 15, 26], textColor: [16, 185, 129], fontSize: 8, fontStyle: 'bold' },
+      headStyles: { fillColor: [185, 28, 28], textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
       bodyStyles: { fontSize: 8, textColor: [50, 50, 50] },
       alternateRowStyles: { fillColor: [245, 247, 250] },
       columnStyles: {
@@ -262,11 +262,11 @@ export default function Quotations({ addToast }) {
     }
 
     y += 8
-    doc.setDrawColor(16, 185, 129)
+    doc.setDrawColor(185, 28, 28)
     doc.line(135, y - 2, 190, y - 2)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(12)
-    doc.setTextColor(16, 185, 129)
+    doc.setTextColor(185, 28, 28)
     doc.text(`Total:`, 140, y + 3)
     doc.text(`$${data.total?.toLocaleString()}`, 190, y + 3, { align: 'right' })
 
@@ -286,11 +286,11 @@ export default function Quotations({ addToast }) {
 
     // Footer
     const pageHeight = doc.internal.pageSize.height
-    doc.setFillColor(10, 15, 26)
+    doc.setFillColor(185, 28, 28)
     doc.rect(0, pageHeight - 15, 210, 15, 'F')
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(7)
-    doc.setTextColor(156, 163, 175)
+    doc.setTextColor(255, 255, 255)
     doc.text('GenomaHub — Medical & Laboratory Equipment Solutions', 105, pageHeight - 7, { align: 'center' })
 
     doc.save(`${data.quote_number}.pdf`)
@@ -349,12 +349,12 @@ export default function Quotations({ addToast }) {
               <tr><td colSpan="9" style={{ textAlign: 'center', padding: 'var(--space-2xl)', color: 'var(--text-tertiary)' }}>No quotations found</td></tr>
             ) : quotes.map(q => (
               <tr key={q.id}>
-                <td style={{ color: 'var(--primary-400)', fontWeight: 700 }}>{q.quote_number}</td>
+                <td style={{ color: 'var(--primary-700)', fontWeight: 700 }}>{q.quote_number}</td>
                 <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{q.client_name || '—'}</td>
                 <td><span className={`badge ${getStatusClass(q.status)}`}>{q.status}</span></td>
                 <td>${q.subtotal?.toLocaleString()}</td>
                 <td>{q.discount_percent > 0 ? `${q.discount_percent}%` : '—'}</td>
-                <td style={{ fontWeight: 700, color: 'var(--primary-400)' }}>${q.total?.toLocaleString()}</td>
+                <td style={{ fontWeight: 700, color: 'var(--primary-700)' }}>${q.total?.toLocaleString()}</td>
                 <td>{q.validity_days} days</td>
                 <td>{new Date(q.date_created).toLocaleDateString()}</td>
                 <td>
@@ -470,7 +470,7 @@ export default function Quotations({ addToast }) {
                           <input type="number" min="0" max="100" value={li.discount_percent}
                             onChange={e => updateLineItem(i, 'discount_percent', parseFloat(e.target.value) || 0)} />
                         </td>
-                        <td style={{ fontWeight: 600, color: 'var(--primary-400)', textAlign: 'right', paddingRight: 14 }}>
+                        <td style={{ fontWeight: 600, color: 'var(--primary-700)', textAlign: 'right', paddingRight: 14 }}>
                           ${getLineTotal(li).toLocaleString()}
                         </td>
                         <td>
@@ -570,7 +570,7 @@ export default function Quotations({ addToast }) {
                         <td style={{ textAlign: 'center' }}>{li.quantity}</td>
                         <td>${parseFloat(li.quoted_price).toLocaleString()}</td>
                         <td>{li.discount_percent > 0 ? `${li.discount_percent}%` : '—'}</td>
-                        <td style={{ fontWeight: 600, color: 'var(--primary-400)' }}>${parseFloat(li.line_total).toLocaleString()}</td>
+                        <td style={{ fontWeight: 600, color: 'var(--primary-700)' }}>${parseFloat(li.line_total).toLocaleString()}</td>
                       </tr>
                     ))}
                   </tbody>

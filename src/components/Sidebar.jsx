@@ -57,14 +57,13 @@ export default function Sidebar({ collapsed, onToggle }) {
           left: 0;
           bottom: 0;
           width: var(--sidebar-width);
-          background: rgba(10, 15, 26, 0.95);
-          backdrop-filter: blur(24px);
-          -webkit-backdrop-filter: blur(24px);
+          background: #ffffff;
           border-right: 1px solid var(--border-primary);
           display: flex;
           flex-direction: column;
           z-index: 100;
           transition: width var(--transition-base);
+          box-shadow: 2px 0 8px rgba(0, 0, 0, 0.04);
         }
 
         .sidebar-collapsed {
@@ -86,22 +85,19 @@ export default function Sidebar({ collapsed, onToggle }) {
           width: 40px;
           height: 40px;
           border-radius: var(--radius-md);
-          background: linear-gradient(135deg, var(--primary-500), var(--accent-600));
+          background: linear-gradient(135deg, #b91c1c, #991b1b);
           display: flex;
           align-items: center;
           justify-content: center;
           color: white;
           flex-shrink: 0;
-          box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+          box-shadow: 0 4px 12px rgba(185, 28, 28, 0.2);
         }
 
         .logo-text {
           font-size: 1.2rem;
           font-weight: 800;
-          background: linear-gradient(135deg, var(--primary-300), var(--accent-400));
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
+          color: #1b1b1b;
           letter-spacing: -0.02em;
         }
 
@@ -133,8 +129,8 @@ export default function Sidebar({ collapsed, onToggle }) {
         }
 
         .nav-item.active {
-          color: var(--primary-400);
-          background: rgba(16, 185, 129, 0.08);
+          color: #b91c1c;
+          background: rgba(185, 28, 28, 0.06);
         }
 
         .nav-indicator {
@@ -144,7 +140,7 @@ export default function Sidebar({ collapsed, onToggle }) {
           transform: translateY(-50%);
           width: 3px;
           height: 20px;
-          background: linear-gradient(180deg, var(--primary-400), var(--accent-500));
+          background: linear-gradient(180deg, #b91c1c, #dc2626);
           border-radius: 0 var(--radius-full) var(--radius-full) 0;
         }
 

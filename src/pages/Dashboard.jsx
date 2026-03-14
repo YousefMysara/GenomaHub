@@ -9,7 +9,7 @@ import {
 } from 'recharts'
 import { useNavigate } from 'react-router-dom'
 
-const CHART_COLORS = ['#10b981', '#06b6d4', '#3b82f6', '#f59e0b', '#a855f7']
+const CHART_COLORS = ['#b91c1c', '#1f2937', '#ef4444', '#6b7280', '#991b1b']
 
 export default function Dashboard() {
   const [data, setData] = useState(null)
@@ -122,25 +122,26 @@ export default function Dashboard() {
           <div style={{ height: 260 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={stockByCategory} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis
                   dataKey="category"
                   tick={{ fill: '#6b7280', fontSize: 11 }}
-                  axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+                  axisLine={{ stroke: '#e5e7eb' }}
                   tickLine={false}
                 />
                 <YAxis
                   tick={{ fill: '#6b7280', fontSize: 11 }}
-                  axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+                  axisLine={{ stroke: '#e5e7eb' }}
                   tickLine={false}
                 />
                 <Tooltip
                   contentStyle={{
-                    background: '#1a2332',
-                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: '#ffffff',
+                    border: '1px solid #e5e7eb',
                     borderRadius: 10,
-                    color: '#f9fafb',
-                    fontSize: 13
+                    color: '#1b1b1b',
+                    fontSize: 13,
+                    boxShadow: '0 4px 14px rgba(0,0,0,0.08)'
                   }}
                 />
                 <Bar dataKey="total_qty" name="Total Quantity" radius={[6, 6, 0, 0]}>
@@ -175,11 +176,12 @@ export default function Dashboard() {
                 </Pie>
                 <Tooltip
                   contentStyle={{
-                    background: '#1a2332',
-                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: '#ffffff',
+                    border: '1px solid #e5e7eb',
                     borderRadius: 10,
-                    color: '#f9fafb',
-                    fontSize: 13
+                    color: '#1b1b1b',
+                    fontSize: 13,
+                    boxShadow: '0 4px 14px rgba(0,0,0,0.08)'
                   }}
                 />
               </PieChart>
@@ -285,7 +287,7 @@ export default function Dashboard() {
             <tbody>
               {recentQuotes.map(q => (
                 <tr key={q.id} style={{ cursor: 'pointer' }} onClick={() => navigate('/quotations')}>
-                  <td style={{ color: 'var(--primary-400)', fontWeight: 600 }}>{q.quote_number}</td>
+                  <td style={{ color: 'var(--primary-700)', fontWeight: 600 }}>{q.quote_number}</td>
                   <td style={{ color: 'var(--text-primary)' }}>{q.client_name || '—'}</td>
                   <td><span className={`badge ${getStatusClass(q.status)}`}>{q.status}</span></td>
                   <td style={{ fontWeight: 600 }}>${q.total?.toLocaleString()}</td>
