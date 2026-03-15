@@ -1,6 +1,17 @@
+/**
+ * Client Management Page
+ * 
+ * Manages the CRM aspect of the system for Hospitals, Labs, and Clinics.
+ * Features:
+ * - Client cards displaying contact information and client type
+ * - Add/Edit modal for maintaining client records
+ * - Filtering by client type (Hospital, Laboratory, Research Facility, Clinic)
+ * - Embedded view of a specific client's quotation history
+ */
 import { useState, useEffect } from 'react'
 import { Users, Plus, Search, Edit2, Trash2, FileText, Building2, GraduationCap, FlaskConical } from 'lucide-react'
 import Modal from '../components/Modal'
+import { supabase } from '../lib/supabase'
 
 const CLIENT_TYPES = ['All', 'Hospital', 'Private Laboratory', 'Research Center', 'Academic']
 
@@ -15,13 +26,14 @@ export default function Clients({ addToast }) {
     name: '', type: 'Laboratory', contact_person: '', email: '', phone: '', address: ''
   })
 
-  const fetchClients = () => {
-    const params = new URLSearchParams()
-    if (typeFilter !== 'All') params.set('type', typeFilter)
-    if (search) params.set('search', search)
-    fetch(`/api/clients?${params}`)
-      .then(r => r.json())
-      .then(setClients)
+  const fetchClients = async () => {
+    let query = supabase.from('clients').select('*').order('created_at', { ascending: false })
+    if (typeFilter !== 'All') query = query.eq('type', typeFilter)
+    if (search) query = query.ilike('name', `%${search}%`)
+    
+    const { data, error } = await query
+    if (error) console.error('Error fetching clients:', error)
+    else setClients(data || [])
   }
 
   useEffect(() => { fetchClients() }, [typeFilter, search])
@@ -42,32 +54,41 @@ export default function Clients({ addToast }) {
   }
 
   const handleSubmit = async () => {
-    const url = editing ? `/api/clients/${editing.id}` : '/api/clients'
-    const method = editing ? 'PUT' : 'POST'
-    const res = await fetch(url, {
-      method, headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form)
-    })
-    if (res.ok) {
+    let res
+    if (editing) {
+      res = await supabase.from('clients').update(form).eq('id', editing.id)
+    } else {
+      res = await supabase.from('clients').insert([form])
+    }
+
+    if (!res.error) {
       addToast(editing ? 'Client updated' : 'Client added successfully')
       setShowModal(false)
       fetchClients()
     } else {
+      console.error(res.error)
       addToast('Failed to save client', 'error')
     }
   }
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this client?')) return
-    await fetch(`/api/clients/${id}`, { method: 'DELETE' })
-    addToast('Client deleted')
-    fetchClients()
+    const { error } = await supabase.from('clients').delete().eq('id', id)
+    if (!error) {
+      addToast('Client deleted')
+      fetchClients()
+    } else {
+      addToast('Failed to delete client', 'error')
+    }
   }
 
   const viewHistory = async (id) => {
-    const res = await fetch(`/api/clients/${id}`)
-    const data = await res.json()
-    setShowHistory(data)
+    const { data, error } = await supabase.from('clients').select('*, quotes:quotations(*)').eq('id', id).single()
+    if (!error) {
+      // Sort quotes by latest first
+      if (data.quotes) data.quotes.sort((a,b) => new Date(b.date_created) - new Date(a.date_created))
+      setShowHistory(data)
+    }
   }
 
   const getTypeIcon = (type) => {

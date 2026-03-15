@@ -1,3 +1,13 @@
+/**
+ * Alerts & Analytics Page
+ * 
+ * Displays critical inventory alerts and stock valuation data.
+ * Features:
+ * - Low Stock items table (highlighting items below reorder level)
+ * - Expiring Kits table (color-coded by 30/60/90 days to expiry)
+ * - Stock Valuation breakdown (total value across Equipment vs Kits)
+ * - Filter functionality to toggle between alert types
+ */
 import { useState, useEffect } from 'react'
 import {
   AlertTriangle, Clock, DollarSign, Package,
@@ -7,6 +17,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell
 } from 'recharts'
+import { supabase } from '../lib/supabase'
 
 const CHART_COLORS = ['#b91c1c', '#1f2937', '#ef4444', '#6b7280', '#991b1b']
 
@@ -17,14 +28,28 @@ export default function Alerts() {
   const [tab, setTab] = useState('lowstock')
 
   useEffect(() => {
-    Promise.all([
-      fetch('/api/inventory/alerts').then(r => r.json()),
-      fetch('/api/inventory').then(r => r.json())
-    ]).then(([alertData, invData]) => {
-      setAlerts(alertData)
-      setInventory(invData)
-      setLoading(false)
-    })
+    const fetchAlerts = async () => {
+      try {
+        const { data, error } = await supabase.from('inventory').select('*, products!inner(*)')
+        if (error) throw error
+        
+        const inv = data?.map(i => ({ ...i, ...i.products, product_id: i.products.id })) || []
+        setInventory(inv)
+
+        const ninetyDaysFromNow = new Date()
+        ninetyDaysFromNow.setDate(ninetyDaysFromNow.getDate() + 90)
+
+        const lowStock = inv.filter(i => i.track_stock !== false && i.quantity <= i.reorder_level).sort((a, b) => a.quantity - b.quantity)
+        const expiring = inv.filter(i => i.track_stock !== false && i.expiry_date && new Date(i.expiry_date) <= ninetyDaysFromNow).sort((a, b) => new Date(a.expiry_date) - new Date(b.expiry_date))
+
+        setAlerts({ lowStock, expiring })
+      } catch (err) {
+        console.error('Error fetching alerts:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchAlerts()
   }, [])
 
   if (loading) {

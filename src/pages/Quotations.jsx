@@ -1,9 +1,20 @@
+/**
+ * Quotations Management Page
+ * 
+ * Handles the creation, tracking, and PDF generation of client quotations.
+ * Features:
+ * - Table view of all quotes with state management (Draft, Sent, Accepted, Rejected)
+ * - Quote Builder: Select client, search/add products, dynamic line item calculation
+ * - Subtotal, discount, and total pricing logic
+ * - Auto-generation of branded PDF quotes using jsPDF
+ */
 import { useState, useEffect, useRef } from 'react'
 import {
   FileText, Plus, Search, Eye, Trash2, Download,
   Send, CheckCircle, XCircle, ChevronDown
 } from 'lucide-react'
 import Modal from '../components/Modal'
+import { supabase } from '../lib/supabase'
 
 const STATUS_OPTIONS = ['All', 'Draft', 'Sent', 'Accepted', 'Rejected']
 
@@ -26,19 +37,25 @@ export default function Quotations({ addToast }) {
   const [showProductDropdown, setShowProductDropdown] = useState(false)
   const dropdownRef = useRef(null)
 
-  const fetchQuotes = () => {
-    const params = new URLSearchParams()
-    if (statusFilter !== 'All') params.set('status', statusFilter)
-    if (search) params.set('search', search)
-    fetch(`/api/quotations?${params}`)
-      .then(r => r.json())
-      .then(setQuotes)
+  const fetchQuotes = async () => {
+    let query = supabase.from('quotations').select('*, clients(name)').order('created_at', { ascending: false })
+    if (statusFilter !== 'All') query = query.eq('status', statusFilter)
+    
+    const { data } = await query
+    let result = data?.map(q => ({ ...q, client_name: q.clients?.name })) || []
+    
+    if (search) {
+      const s = search.toLowerCase()
+      result = result.filter(q => q.quote_number.toLowerCase().includes(s) || q.client_name?.toLowerCase().includes(s))
+    }
+    setQuotes(result)
   }
 
   useEffect(() => { fetchQuotes() }, [statusFilter, search])
+  
   useEffect(() => {
-    fetch('/api/clients').then(r => r.json()).then(setClients)
-    fetch('/api/products').then(r => r.json()).then(setProducts)
+    supabase.from('clients').select('id, name').order('name').then(({data}) => setClients(data || []))
+    supabase.from('products').select('id, name, item_code, base_price').order('name').then(({data}) => setProducts(data || []))
   }, [])
 
   // Close dropdown on outside click
@@ -102,41 +119,54 @@ export default function Quotations({ addToast }) {
       return
     }
 
-    const body = {
-      ...builderForm,
+    const quote_number = `QT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
+    
+    const quoteData = {
+      quote_number,
       client_id: parseInt(builderForm.client_id),
-      lineItems: lineItems.map(li => ({
-        product_id: li.product_id,
-        quantity: parseInt(li.quantity),
-        quoted_price: parseFloat(li.quoted_price),
-        discount_percent: parseFloat(li.discount_percent) || 0
-      }))
+      status: 'Draft',
+      subtotal,
+      discount_percent: builderForm.discount_percent || 0,
+      total,
+      validity_days: builderForm.validity_days,
+      terms_conditions: builderForm.terms_conditions,
+      notes: builderForm.notes
     }
 
-    const res = await fetch('/api/quotations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    })
+    const { data: newQuote, error: quoteError } = await supabase.from('quotations').insert([quoteData]).select().single()
+    
+    if (quoteError) {
+      console.error(quoteError)
+      addToast('Failed to create quotation', 'error')
+      return
+    }
 
-    if (res.ok) {
+    const lineItemsData = lineItems.map(li => ({
+      quote_id: newQuote.id,
+      product_id: li.product_id,
+      quantity: parseInt(li.quantity),
+      quoted_price: parseFloat(li.quoted_price),
+      discount_percent: parseFloat(li.discount_percent) || 0,
+      line_total: getLineTotal(li)
+    }))
+
+    const { error: lineError } = await supabase.from('quote_line_items').insert(lineItemsData)
+
+    if (!lineError) {
       addToast('Quotation created successfully!')
       setShowBuilder(false)
       setLineItems([])
       setBuilderForm({ client_id: '', validity_days: 30, terms_conditions: 'Standard delivery and installation terms apply. Warranty as per manufacturer guidelines.', notes: '', discount_percent: 0 })
       fetchQuotes()
     } else {
-      addToast('Failed to create quotation', 'error')
+      console.error(lineError)
+      addToast('Failed to create line items', 'error')
     }
   }
 
   const updateStatus = async (id, status) => {
-    const res = await fetch(`/api/quotations/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status })
-    })
-    if (res.ok) {
+    const { error } = await supabase.from('quotations').update({ status }).eq('id', id)
+    if (!error) {
       addToast(`Status updated to ${status}`)
       fetchQuotes()
       if (showDetails?.id === id) viewDetails(id)
@@ -145,23 +175,46 @@ export default function Quotations({ addToast }) {
 
   const deleteQuote = async (id) => {
     if (!confirm('Delete this quotation?')) return
-    await fetch(`/api/quotations/${id}`, { method: 'DELETE' })
-    addToast('Quotation deleted')
-    fetchQuotes()
+    const { error } = await supabase.from('quotations').delete().eq('id', id)
+    if (!error) {
+      addToast('Quotation deleted')
+      fetchQuotes()
+    }
   }
 
   const viewDetails = async (id) => {
-    const res = await fetch(`/api/quotations/${id}`)
-    const data = await res.json()
-    setShowDetails(data)
+    const { data: quote } = await supabase.from('quotations').select('*, clients(name, contact_person, email, address)').eq('id', id).single()
+    const { data: lines } = await supabase.from('quote_line_items').select('*, products(name, item_code, item_type)').eq('quote_id', id)
+    
+    if (quote) {
+      const mappedQuote = {
+        ...quote,
+        client_name: quote.clients?.name,
+        contact_person: quote.clients?.contact_person,
+        email: quote.clients?.email,
+        address: quote.clients?.address,
+        lineItems: lines?.map(li => ({
+          ...li,
+          product_name: li.products?.name,
+          item_code: li.products?.item_code,
+          item_type: li.products?.item_type
+        })) || []
+      }
+      setShowDetails(mappedQuote)
+    }
   }
 
   const downloadPDF = async (quote) => {
     // Fetch full details if needed
     let data = quote
     if (!quote.lineItems) {
-      const res = await fetch(`/api/quotations/${quote.id}`)
-      data = await res.json()
+      const { data: q } = await supabase.from('quotations').select('*, clients(name, contact_person, email, address)').eq('id', quote.id).single()
+      const { data: lines } = await supabase.from('quote_line_items').select('*, products(name, item_code, item_type)').eq('quote_id', quote.id)
+      data = { 
+        ...q, 
+        client_name: q.clients?.name, contact_person: q.clients?.contact_person, email: q.clients?.email, address: q.clients?.address, 
+        lineItems: lines?.map(li => ({ ...li, product_name: li.products?.name, item_code: li.products?.item_code, item_type: li.products?.item_type })) || [] 
+      }
     }
 
     const { jsPDF } = await import('jspdf')

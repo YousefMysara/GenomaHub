@@ -1,3 +1,12 @@
+/**
+ * Sidebar Navigation Component
+ * 
+ * Fixed navigation menu that acts as the primary layout controller.
+ * Features:
+ * - Collapsible state (icon-only mode) controlled by parent App
+ * - Active route highlighting with brand colors
+ * - Icons for all major application modules
+ */
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Package, Warehouse, FileText,

@@ -1,6 +1,17 @@
+/**
+ * Inventory Management Page
+ * 
+ * Tracks real-time stock levels, locations, and specific product identifiers.
+ * Features:
+ * - Table view of stock levels with visual status badges (In Stock, Low Stock, Out of Stock)
+ * - Filtering by item type and stock status
+ * - Update stock modal to manually adjust quantities or update expiry/lot/serial data
+ * - Expiry date calculation and color-coded warnings
+ */
 import { useState, useEffect } from 'react'
-import { Warehouse, Search, Edit2, AlertTriangle, Thermometer, Hash } from 'lucide-react'
+import { Warehouse, Search, Edit2, AlertTriangle, Thermometer, Hash, CheckCircle, XCircle } from 'lucide-react'
 import Modal from '../components/Modal'
+import { supabase } from '../lib/supabase'
 
 export default function Inventory({ addToast }) {
   const [items, setItems] = useState([])
@@ -13,14 +24,44 @@ export default function Inventory({ addToast }) {
     quantity: '', location: '', reorder_level: '', lot_number: '', serial_number: '', expiry_date: ''
   })
 
-  const fetchInventory = () => {
-    const params = new URLSearchParams()
-    if (typeFilter !== 'All') params.set('item_type', typeFilter)
-    if (stockFilter !== 'All') params.set('stock_status', stockFilter)
-    if (search) params.set('search', search)
-    fetch(`/api/inventory?${params}`)
-      .then(r => r.json())
-      .then(setItems)
+  const fetchInventory = async () => {
+    const { data, error } = await supabase
+      .from('inventory')
+      .select('*, products!inner(*, brands(name))')
+      .order('updated_at', { ascending: false })
+
+    if (error) {
+      console.error(error)
+      return
+    }
+
+    let result = data?.map(i => ({
+      ...i.products,
+      ...i, // inventory overrides product fields (ensures ID is inventory.id)
+      brand_name: i.products.brands?.name
+    })) || []
+
+    // Client-side filtering
+    if (typeFilter !== 'All') result = result.filter(r => r.item_type === typeFilter)
+    if (search) {
+      const s = search.toLowerCase()
+      result = result.filter(r => 
+        r.name?.toLowerCase().includes(s) || 
+        r.item_code?.toLowerCase().includes(s) ||
+        r.serial_number?.toLowerCase().includes(s) ||
+        r.lot_number?.toLowerCase().includes(s)
+      )
+    }
+    if (stockFilter !== 'All') {
+      result = result.filter(r => {
+        if (stockFilter === 'ok') return r.quantity > r.reorder_level
+        if (stockFilter === 'low') return r.quantity <= r.reorder_level && r.quantity > 0
+        if (stockFilter === 'out') return r.quantity === 0
+        return true
+      })
+    }
+    
+    setItems(result)
   }
 
   useEffect(() => { fetchInventory() }, [typeFilter, stockFilter, search])
@@ -42,18 +83,21 @@ export default function Inventory({ addToast }) {
     const body = {
       ...form,
       quantity: parseInt(form.quantity) || 0,
-      reorder_level: parseInt(form.reorder_level) || 5
+      reorder_level: parseInt(form.reorder_level) || 5,
+      updated_at: new Date().toISOString()
     }
-    const res = await fetch(`/api/inventory/${editing.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    })
-    if (res.ok) {
+
+    // Handle empty date string for Supabase inserting NULL
+    if (!body.expiry_date) body.expiry_date = null
+
+    const { error } = await supabase.from('inventory').update(body).eq('id', editing.id)
+    
+    if (!error) {
       addToast('Inventory updated successfully')
       setShowModal(false)
       fetchInventory()
     } else {
+      console.error(error)
       addToast('Failed to update inventory', 'error')
     }
   }

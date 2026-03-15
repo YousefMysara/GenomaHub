@@ -1,3 +1,14 @@
+/**
+ * Dashboard Overview Page
+ * 
+ * The main landing page displaying key performance indicators (KPIs) and aggregated statistics.
+ * Features:
+ * - KPI Cards (Total Products, Stock Value, Active Quotes, Alerts)
+ * - Category Distribution Pie Chart
+ * - Stock by Category Bar Chart
+ * - Quick views of Low Stock and Expiring Kits alerts
+ * - Recent quotations table
+ */
 import { useState, useEffect } from 'react'
 import {
   Package, DollarSign, FileText, AlertTriangle,
@@ -8,6 +19,7 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 
 const CHART_COLORS = ['#b91c1c', '#1f2937', '#ef4444', '#6b7280', '#991b1b']
 
@@ -17,10 +29,62 @@ export default function Dashboard() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    fetch('/api/dashboard')
-      .then(r => r.json())
-      .then(d => { setData(d); setLoading(false) })
-      .catch(() => setLoading(false))
+    const fetchDashboardData = async () => {
+      try {
+        const { count: totalProducts } = await supabase.from('products').select('*', { count: 'exact', head: true })
+        
+        const { data: inventoryData } = await supabase.from('inventory').select('*, products!inner(*)')
+        let stockValue = 0
+        const stockByCategoryMap = {}
+
+        const lowStockAll = []
+        const expiringAll = []
+        const ninetyDaysFromNow = new Date()
+        ninetyDaysFromNow.setDate(ninetyDaysFromNow.getDate() + 90)
+
+        inventoryData?.forEach(item => {
+          const qty = item.quantity || 0
+          const price = item.products?.base_price || 0
+          const cat = item.products?.category || 'Other'
+          const trackStock = item.products?.track_stock !== false
+          
+          stockValue += qty * price
+
+          if (!stockByCategoryMap[cat]) stockByCategoryMap[cat] = { category: cat, total_qty: 0, item_count: 0 }
+          stockByCategoryMap[cat].total_qty += qty
+          stockByCategoryMap[cat].item_count += 1
+
+          if (trackStock) {
+            if (qty <= item.reorder_level) {
+              lowStockAll.push({ ...item, name: item.products.name, item_code: item.products.item_code, item_type: item.products.item_type })
+            }
+            if (item.expiry_date && new Date(item.expiry_date) <= ninetyDaysFromNow) {
+              expiringAll.push({ ...item, name: item.products.name, item_code: item.products.item_code })
+            }
+          }
+        })
+
+        const stockByCategory = Object.values(stockByCategoryMap).sort((a,b) => b.total_qty - a.total_qty)
+        const lowStockItems = lowStockAll.sort((a,b) => a.quantity - b.quantity).slice(0, 5)
+        const expiringItems = expiringAll.sort((a,b) => new Date(a.expiry_date) - new Date(b.expiry_date)).slice(0, 5)
+
+        const { count: activeQuotes } = await supabase.from('quotations').select('*', { count: 'exact', head: true }).in('status', ['Draft', 'Sent'])
+        const { count: totalClients } = await supabase.from('clients').select('*', { count: 'exact', head: true })
+        const { data: recentQuotesRaw } = await supabase.from('quotations').select('*, clients(name)').order('date_created', { ascending: false }).limit(5)
+        const recentQuotes = recentQuotesRaw?.map(q => ({ ...q, client_name: q.clients?.name })) || []
+
+        setData({
+          stats: { totalProducts, stockValue, lowStockCount: lowStockAll.length, activeQuotes, expiringCount: expiringAll.length, totalClients },
+          recentQuotes, stockByCategory, lowStockItems, expiringItems
+        })
+      } catch (err) {
+        console.error('Error fetching dashboard data:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchDashboardData()
   }, [])
 
   if (loading) {
