@@ -40,10 +40,15 @@ export default function Quotations({ addToast }) {
   const dropdownRef = useRef(null)
 
   const fetchQuotes = async () => {
-    let query = supabase.from('quotations').select('*, clients(name), contacts(first_name, last_name)').order('created_at', { ascending: false })
+    let query = supabase.from('quotations').select('*, clients(name), contacts(first_name, last_name)')
     if (statusFilter !== 'All') query = query.eq('status', statusFilter)
     
-    const { data } = await query
+    const { data, error } = await query
+    if (error) {
+      console.error("Fetch Quotes Error:", error)
+      addToast("Error fetching quotes: " + error.message, "error")
+    }
+    
     let result = data?.map(q => ({ 
       ...q, 
       client_name: q.clients?.name,
@@ -54,6 +59,10 @@ export default function Quotations({ addToast }) {
       const s = search.toLowerCase()
       result = result.filter(q => q.quote_number.toLowerCase().includes(s) || q.client_name?.toLowerCase().includes(s) || q.contact_name?.toLowerCase().includes(s))
     }
+
+    // Sort locally by whatever date column exists (created_at or date_created fallback)
+    result.sort((a, b) => new Date(b.created_at || b.date_created || 0) - new Date(a.created_at || a.date_created || 0))
+
     setQuotes(result)
   }
 
