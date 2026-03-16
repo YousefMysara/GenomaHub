@@ -4,7 +4,7 @@
  * Handles the creation, tracking, and PDF generation of client quotations.
  * Features:
  * - Table view of all quotes with state management (Draft, Sent, Accepted, Rejected)
- * - Quote Builder: Select client, search/add products, dynamic line item calculation
+ * - Quote Builder: Select contact person, search/add products, dynamic line item calculation
  * - Subtotal, discount, and total pricing logic
  * - Auto-generation of branded PDF quotes using jsPDF
  */
@@ -24,12 +24,14 @@ export default function Quotations({ addToast }) {
   const [statusFilter, setStatusFilter] = useState('All')
   const [showBuilder, setShowBuilder] = useState(false)
   const [showDetails, setShowDetails] = useState(null)
-  const [clients, setClients] = useState([])
+  
+  // Contacts and Products
+  const [contacts, setContacts] = useState([])
   const [products, setProducts] = useState([])
 
   // Builder state
   const [builderForm, setBuilderForm] = useState({
-    client_id: '', validity_days: 30, terms_conditions: 'Standard delivery and installation terms apply. Warranty as per manufacturer guidelines.',
+    contact_id: '', validity_days: 30, terms_conditions: 'Standard delivery and installation terms apply. Warranty as per manufacturer guidelines.',
     notes: '', discount_percent: 0
   })
   const [lineItems, setLineItems] = useState([])
@@ -38,15 +40,19 @@ export default function Quotations({ addToast }) {
   const dropdownRef = useRef(null)
 
   const fetchQuotes = async () => {
-    let query = supabase.from('quotations').select('*, clients(name)').order('created_at', { ascending: false })
+    let query = supabase.from('quotations').select('*, clients(name), contacts(first_name, last_name)').order('created_at', { ascending: false })
     if (statusFilter !== 'All') query = query.eq('status', statusFilter)
     
     const { data } = await query
-    let result = data?.map(q => ({ ...q, client_name: q.clients?.name })) || []
+    let result = data?.map(q => ({ 
+      ...q, 
+      client_name: q.clients?.name,
+      contact_name: q.contacts ? `${q.contacts.first_name} ${q.contacts.last_name}` : ''
+    })) || []
     
     if (search) {
       const s = search.toLowerCase()
-      result = result.filter(q => q.quote_number.toLowerCase().includes(s) || q.client_name?.toLowerCase().includes(s))
+      result = result.filter(q => q.quote_number.toLowerCase().includes(s) || q.client_name?.toLowerCase().includes(s) || q.contact_name?.toLowerCase().includes(s))
     }
     setQuotes(result)
   }
@@ -54,8 +60,9 @@ export default function Quotations({ addToast }) {
   useEffect(() => { fetchQuotes() }, [statusFilter, search])
   
   useEffect(() => {
-    supabase.from('clients').select('id, name').order('name').then(({data}) => setClients(data || []))
-    supabase.from('products').select('id, name, item_code, base_price').order('name').then(({data}) => setProducts(data || []))
+    // Fetch contacts with nested client info
+    supabase.from('contacts').select('id, first_name, last_name, client_id, clients(name)').order('first_name').then(({data}) => setContacts(data || []))
+    supabase.from('products').select('id, name, item_code, base_price, item_type').order('name').then(({data}) => setProducts(data || []))
   }, [])
 
   // Close dropdown on outside click
@@ -110,8 +117,8 @@ export default function Quotations({ addToast }) {
   const total = subtotal - discountAmount
 
   const handleCreateQuote = async () => {
-    if (!builderForm.client_id) {
-      addToast('Please select a client', 'warning')
+    if (!builderForm.contact_id) {
+      addToast('Please select a contact person', 'warning')
       return
     }
     if (lineItems.length === 0) {
@@ -119,11 +126,20 @@ export default function Quotations({ addToast }) {
       return
     }
 
+    const selectedContact = contacts.find(c => c.id === builderForm.contact_id)
+    if (!selectedContact) {
+      addToast('Invalid contact selected', 'error')
+      return
+    }
+
     const quote_number = `QT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
     
+    // UUID bug note: builderForm.contact_id is a valid UUID, so we directly assign it.
+    // Derived client_id from selected contact.
     const quoteData = {
       quote_number,
-      client_id: parseInt(builderForm.client_id),
+      client_id: selectedContact.client_id, 
+      contact_id: selectedContact.id,
       status: 'Draft',
       subtotal,
       discount_percent: builderForm.discount_percent || 0,
@@ -156,7 +172,7 @@ export default function Quotations({ addToast }) {
       addToast('Quotation created successfully!')
       setShowBuilder(false)
       setLineItems([])
-      setBuilderForm({ client_id: '', validity_days: 30, terms_conditions: 'Standard delivery and installation terms apply. Warranty as per manufacturer guidelines.', notes: '', discount_percent: 0 })
+      setBuilderForm({ contact_id: '', validity_days: 30, terms_conditions: 'Standard delivery and installation terms apply. Warranty as per manufacturer guidelines.', notes: '', discount_percent: 0 })
       fetchQuotes()
     } else {
       console.error(lineError)
@@ -183,15 +199,27 @@ export default function Quotations({ addToast }) {
   }
 
   const viewDetails = async (id) => {
-    const { data: quote } = await supabase.from('quotations').select('*, clients(name, contact_person, email, address)').eq('id', id).single()
+    // Fetch quote, client, and specific contact
+    const { data: quote } = await supabase.from('quotations').select('*, clients(name, address), contacts(first_name, last_name, email, phone)').eq('id', id).single()
+    
+    // Fallback for legacy quotes that don't have a contact_id
+    let primaryContact = {}
+    if (quote.contacts) {
+      primaryContact = quote.contacts
+    } else {
+      const { data: contacts } = await supabase.from('contacts').select('*').eq('client_id', quote.client_id).order('is_primary', { ascending: false }).limit(1)
+      primaryContact = contacts?.[0] || {}
+    }
+
+    // Fetch lines
     const { data: lines } = await supabase.from('quote_line_items').select('*, products(name, item_code, item_type)').eq('quote_id', id)
     
     if (quote) {
       const mappedQuote = {
         ...quote,
         client_name: quote.clients?.name,
-        contact_person: quote.clients?.contact_person,
-        email: quote.clients?.email,
+        contact_person: primaryContact.first_name ? `${primaryContact.first_name} ${primaryContact.last_name}` : '',
+        email: primaryContact.email,
         address: quote.clients?.address,
         lineItems: lines?.map(li => ({
           ...li,
@@ -208,11 +236,23 @@ export default function Quotations({ addToast }) {
     // Fetch full details if needed
     let data = quote
     if (!quote.lineItems) {
-      const { data: q } = await supabase.from('quotations').select('*, clients(name, contact_person, email, address)').eq('id', quote.id).single()
+      const { data: q } = await supabase.from('quotations').select('*, clients(name, address), contacts(first_name, last_name, email, phone)').eq('id', quote.id).single()
+      
+      let primaryContact = {}
+      if (q.contacts) {
+        primaryContact = q.contacts
+      } else {
+        const { data: contacts } = await supabase.from('contacts').select('*').eq('client_id', q.client_id).order('is_primary', { ascending: false }).limit(1)
+        primaryContact = contacts?.[0] || {}
+      }
+
       const { data: lines } = await supabase.from('quote_line_items').select('*, products(name, item_code, item_type)').eq('quote_id', quote.id)
       data = { 
         ...q, 
-        client_name: q.clients?.name, contact_person: q.clients?.contact_person, email: q.clients?.email, address: q.clients?.address, 
+        client_name: q.clients?.name, 
+        contact_person: primaryContact.first_name ? `${primaryContact.first_name} ${primaryContact.last_name}` : '', 
+        email: primaryContact.email, 
+        address: q.clients?.address, 
         lineItems: lines?.map(li => ({ ...li, product_name: li.products?.name, item_code: li.products?.item_code, item_type: li.products?.item_type })) || [] 
       }
     }
@@ -244,7 +284,7 @@ export default function Quotations({ addToast }) {
     doc.text(data.quote_number, 190, 22, { align: 'right' })
     doc.setFontSize(9)
     doc.setTextColor(100, 100, 100)
-    doc.text(`Date: ${new Date(data.date_created).toLocaleDateString()}`, 190, 30, { align: 'right' })
+    doc.text(`Date: ${new Date(data.created_at || data.date_created).toLocaleDateString()}`, 190, 30, { align: 'right' })
     doc.text(`Valid: ${data.validity_days} days`, 190, 36, { align: 'right' })
 
     // Client info
@@ -387,7 +427,8 @@ export default function Quotations({ addToast }) {
           <thead>
             <tr>
               <th>Quote #</th>
-              <th>Client</th>
+              <th>Contact</th>
+              <th>Organization</th>
               <th>Status</th>
               <th>Subtotal</th>
               <th>Discount</th>
@@ -399,17 +440,18 @@ export default function Quotations({ addToast }) {
           </thead>
           <tbody>
             {quotes.length === 0 ? (
-              <tr><td colSpan="9" style={{ textAlign: 'center', padding: 'var(--space-2xl)', color: 'var(--text-tertiary)' }}>No quotations found</td></tr>
+              <tr><td colSpan="10" style={{ textAlign: 'center', padding: 'var(--space-2xl)', color: 'var(--text-tertiary)' }}>No quotations found</td></tr>
             ) : quotes.map(q => (
               <tr key={q.id}>
                 <td style={{ color: 'var(--primary-700)', fontWeight: 700 }}>{q.quote_number}</td>
-                <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{q.client_name || '—'}</td>
+                <td style={{ fontWeight: 500 }}>{q.contact_name || '—'}</td>
+                <td style={{ color: 'var(--text-primary)' }}>{q.client_name || '—'}</td>
                 <td><span className={`badge ${getStatusClass(q.status)}`}>{q.status}</span></td>
                 <td>${q.subtotal?.toLocaleString()}</td>
                 <td>{q.discount_percent > 0 ? `${q.discount_percent}%` : '—'}</td>
                 <td style={{ fontWeight: 700, color: 'var(--primary-700)' }}>${q.total?.toLocaleString()}</td>
                 <td>{q.validity_days} days</td>
-                <td>{new Date(q.date_created).toLocaleDateString()}</td>
+                <td>{new Date(q.created_at || q.date_created).toLocaleDateString()}</td>
                 <td>
                   <div className="actions-cell">
                     <button onClick={() => viewDetails(q.id)} title="View"><Eye size={15} /></button>
@@ -437,15 +479,18 @@ export default function Quotations({ addToast }) {
         <div className="modal-body">
           <div className="quote-builder">
             {/* Client & Settings */}
-            <div className="form-row-3">
-              <div className="form-group">
-                <label>Client *</label>
-                <select className="form-input" value={builderForm.client_id} onChange={e => setBuilderForm({ ...builderForm, client_id: e.target.value })}>
-                  <option value="">Select client...</option>
-                  {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            <div className="form-row" style={{ display: 'flex', gap: 'var(--space-md)' }}>
+              <div className="form-group" style={{ flex: 1.5 }}>
+                <label>Contact Person *</label>
+                <select className="form-input" value={builderForm.contact_id} onChange={e => setBuilderForm({ ...builderForm, contact_id: e.target.value })}>
+                  <option value="">Select contact...</option>
+                  {contacts.map(c => <option key={c.id} value={c.id}>{c.first_name} {c.last_name} ({c.clients?.name})</option>)}
                 </select>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: 4 }}>
+                  The quotation will automatically be mapped to their Organization.
+                </div>
               </div>
-              <div className="form-group">
+              <div className="form-group" style={{ flex: 1 }}>
                 <label>Validity (days)</label>
                 <select className="form-input" value={builderForm.validity_days} onChange={e => setBuilderForm({ ...builderForm, validity_days: parseInt(e.target.value) })}>
                   <option value={30}>30 days</option>
@@ -453,7 +498,7 @@ export default function Quotations({ addToast }) {
                   <option value={90}>90 days</option>
                 </select>
               </div>
-              <div className="form-group">
+              <div className="form-group" style={{ flex: 1 }}>
                 <label>Total Discount (%)</label>
                 <input className="form-input" type="number" min="0" max="100" value={builderForm.discount_percent} onChange={e => setBuilderForm({ ...builderForm, discount_percent: parseFloat(e.target.value) || 0 })} />
               </div>
@@ -461,7 +506,7 @@ export default function Quotations({ addToast }) {
 
             {/* Product Search */}
             <div className="form-group">
-              <label>Add Products</label>
+              <label style={{ fontWeight: 600, display: 'block', marginTop: 'var(--space-md)' }}>Add Quotation Lines</label>
               <div className="product-search-dropdown" ref={dropdownRef}>
                 <input
                   className="form-input"
@@ -556,7 +601,7 @@ export default function Quotations({ addToast }) {
             )}
 
             {/* Terms */}
-            <div className="form-group">
+            <div className="form-group" style={{ marginTop: 'var(--space-md)' }}>
               <label>Terms & Conditions</label>
               <textarea className="form-input" rows="3" value={builderForm.terms_conditions}
                 onChange={e => setBuilderForm({ ...builderForm, terms_conditions: e.target.value })} />
@@ -570,7 +615,7 @@ export default function Quotations({ addToast }) {
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={() => setShowBuilder(false)}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleCreateQuote}>
+          <button className="btn btn-primary" onClick={handleCreateQuote} disabled={lineItems.length === 0 || !builderForm.contact_id}>
             <FileText size={16} /> Create Quotation
           </button>
         </div>
@@ -583,17 +628,17 @@ export default function Quotations({ addToast }) {
             <div className="modal-body">
               <div className="form-row" style={{ marginBottom: 'var(--space-lg)' }}>
                 <div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 700, marginBottom: 4 }}>Client</div>
-                  <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{showDetails.client_name}</div>
-                  {showDetails.contact_person && <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{showDetails.contact_person}</div>}
-                  {showDetails.email && <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{showDetails.email}</div>}
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 700, marginBottom: 4 }}>Billed To</div>
+                  <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '1.05rem' }}>{showDetails.client_name}</div>
+                  {showDetails.contact_person && <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Attn: {showDetails.contact_person}</div>}
+                  {showDetails.email && <div style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>{showDetails.email}</div>}
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <span className={`badge ${getStatusClass(showDetails.status)}`} style={{ fontSize: '0.85rem', padding: '6px 16px' }}>
                     {showDetails.status}
                   </span>
                   <div style={{ fontSize: '0.82rem', color: 'var(--text-tertiary)', marginTop: 8 }}>
-                    Created: {new Date(showDetails.date_created).toLocaleDateString()} · Valid: {showDetails.validity_days} days
+                    Created: {new Date(showDetails.created_at || showDetails.date_created).toLocaleDateString()} · Valid: {showDetails.validity_days} days
                   </div>
                 </div>
               </div>
@@ -615,11 +660,11 @@ export default function Quotations({ addToast }) {
                   </thead>
                   <tbody>
                     {(showDetails.lineItems || []).map((li, i) => (
-                      <tr key={li.id}>
+                      <tr key={li.id || i}>
                         <td style={{ textAlign: 'center' }}>{i + 1}</td>
                         <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>{li.item_code}</td>
                         <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{li.product_name}</td>
-                        <td><span className={`badge ${li.item_type === 'Equipment' ? 'badge-equipment' : 'badge-kit'}`}>{li.item_type}</span></td>
+                        <td><span className={`badge ${li.item_type === 'Equipment' ? 'badge-equipment' : 'badge-kit'}`}>{li.item_type || 'Product'}</span></td>
                         <td style={{ textAlign: 'center' }}>{li.quantity}</td>
                         <td>${parseFloat(li.quoted_price).toLocaleString()}</td>
                         <td>{li.discount_percent > 0 ? `${li.discount_percent}%` : '—'}</td>

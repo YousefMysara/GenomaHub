@@ -1,17 +1,14 @@
 /**
- * Invoices Module
+ * Invoices Module (v2)
  * 
  * Manages sales invoices that link to inventory batches.
- * When an invoice is finalized, the selected batches are marked as "Sold"
- * and their quantities are deducted from the available inventory.
- * 
  * Features:
- * - Invoice list with status badges (Draft / Finalized)
- * - Create Invoice modal with client selection, searchable product picker, and batch selection
- * - Finalize flow that deducts inventory and stamps sold_to_client metadata
+ * - Details modal for viewing past invoices.
+ * - Contact-based selection (picks an org automatically).
+ * - Finalize flow deducts stock, sets status to Sold, and updates Location to "Sold to: [Organization]".
  */
 import { useState, useEffect, Fragment } from 'react'
-import { FileText, Plus, Search, CheckCircle, Trash2, Package } from 'lucide-react'
+import { FileText, Plus, Search, CheckCircle, Trash2, Package, Eye } from 'lucide-react'
 import Modal from '../components/Modal'
 import { supabase } from '../lib/supabase'
 
@@ -19,12 +16,15 @@ export default function Invoices({ addToast }) {
   const [invoices, setInvoices] = useState([])
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
+  
+  // Modals
   const [showModal, setShowModal] = useState(false)
+  const [showDetails, setShowDetails] = useState(null)
 
   // Create Invoice State
-  const [clients, setClients] = useState([])
+  const [contacts, setContacts] = useState([]) // from DB
   const [allProducts, setAllProducts] = useState([])
-  const [form, setForm] = useState({ client_id: '', notes: '' })
+  const [form, setForm] = useState({ contact_id: '', notes: '' })
   const [lineItems, setLineItems] = useState([])
   
   // Product search for adding line items
@@ -40,27 +40,16 @@ export default function Invoices({ addToast }) {
   }
 
   const fetchFormData = async () => {
-    const { data: cl } = await supabase.from('clients').select('id, name').order('name')
-    if (cl) setClients(cl)
+    // Fetch contacts with nested client info
+    const { data: c } = await supabase.from('contacts').select('id, first_name, last_name, client_id, clients(name)').order('first_name')
+    if (c) setContacts(c)
 
     // Fetch products that have available inventory
-    const { data: prods } = await supabase
-      .from('products')
-      .select('*, brands(name)')
-      .eq('track_stock', true)
-      .order('name')
-    
+    const { data: prods } = await supabase.from('products').select('*, brands(name)').eq('track_stock', true).order('name')
     if (prods) {
-      // Also fetch available batches for each
-      const { data: batches } = await supabase
-        .from('inventory')
-        .select('*')
-        .eq('status', 'Available')
-      
+      const { data: batches } = await supabase.from('inventory').select('*').eq('status', 'Available')
       const enriched = prods.map(p => ({
-        ...p,
-        brand_name: p.brands?.name,
-        available_batches: (batches || []).filter(b => b.product_id === p.id)
+        ...p, brand_name: p.brands?.name, available_batches: (batches || []).filter(b => b.product_id === p.id)
       }))
       setAllProducts(enriched)
     }
@@ -69,7 +58,7 @@ export default function Invoices({ addToast }) {
   useEffect(() => { fetchInvoices() }, [])
 
   const openCreate = () => {
-    setForm({ client_id: '', notes: '' })
+    setForm({ contact_id: '', notes: '' })
     setLineItems([])
     setProductSearch('')
     setShowProductDropdown(false)
@@ -77,79 +66,61 @@ export default function Invoices({ addToast }) {
     setShowModal(true)
   }
 
+  const viewDetails = async (invoice) => {
+    const { data: lines } = await supabase.from('invoice_items').select('*, products(name, item_code, item_type), inventory(lot_number, serial_number)').eq('invoice_id', invoice.id)
+    setShowDetails({ ...invoice, lineItems: lines || [] })
+  }
+
+  // --- Invoice Builder ---
   const addLineItem = (product, batch) => {
-    // Prevent duplicate batch
-    if (lineItems.find(l => l.batch_id === batch.id)) {
-      return addToast('This batch is already in the invoice', 'error')
-    }
+    if (lineItems.find(l => l.batch_id === batch.id)) return addToast('This batch is already in the invoice', 'error')
     setLineItems([...lineItems, {
-      product_id: product.id,
-      product_name: product.name,
-      item_code: product.item_code,
-      item_type: product.item_type,
-      batch_id: batch.id,
-      lot_or_serial: product.item_type === 'Instrument' ? `SN: ${batch.serial_number || 'N/A'}` : `LOT: ${batch.lot_number || 'N/A'}`,
-      max_qty: batch.quantity,
-      quantity: product.item_type === 'Instrument' ? 1 : batch.quantity,
-      unit_price: product.base_price || 0
+      product_id: product.id, product_name: product.name, item_code: product.item_code, item_type: product.item_type,
+      batch_id: batch.id, lot_or_serial: product.item_type === 'Instrument' ? `SN: ${batch.serial_number || 'N/A'}` : `LOT: ${batch.lot_number || 'N/A'}`,
+      max_qty: batch.quantity, quantity: product.item_type === 'Instrument' ? 1 : batch.quantity, unit_price: product.base_price || 0
     }])
-    setProductSearch('')
-    setShowProductDropdown(false)
+    setProductSearch(''); setShowProductDropdown(false)
   }
 
-  const removeLineItem = (idx) => {
-    setLineItems(lineItems.filter((_, i) => i !== idx))
-  }
-
+  const removeLineItem = (idx) => setLineItems(lineItems.filter((_, i) => i !== idx))
+  
   const updateLineQty = (idx, qty) => {
-    const updated = [...lineItems]
-    updated[idx].quantity = Math.min(parseInt(qty) || 0, updated[idx].max_qty)
+    const updated = [...lineItems]; updated[idx].quantity = Math.min(parseInt(qty) || 0, updated[idx].max_qty)
     setLineItems(updated)
   }
-
+  
   const updateLinePrice = (idx, price) => {
-    const updated = [...lineItems]
-    updated[idx].unit_price = parseFloat(price) || 0
+    const updated = [...lineItems]; updated[idx].unit_price = parseFloat(price) || 0
     setLineItems(updated)
   }
 
   const totalAmount = lineItems.reduce((sum, l) => sum + (l.quantity * l.unit_price), 0)
 
   const handleCreateInvoice = async () => {
-    if (!form.client_id) return addToast('Please select a client', 'error')
+    if (!form.contact_id) return addToast('Please select a contact person', 'error')
     if (lineItems.length === 0) return addToast('Add at least one item', 'error')
 
-    // 1. Generate invoice number
+    const selectedContact = contacts.find(c => c.id === form.contact_id)
+    if (!selectedContact) return addToast('Invalid contact selected', 'error')
+
     const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`
 
-    // 2. Create invoice
     const { data: inv, error: invErr } = await supabase.from('invoices').insert({
       invoice_number: invoiceNumber,
-      client_id: form.client_id,
+      client_id: selectedContact.client_id, // Automatically ties to the Organization
       notes: form.notes || null,
       total_amount: totalAmount,
       status: 'Draft'
     }).select().single()
 
-    if (invErr) {
-      console.error(invErr)
-      return addToast('Failed to create invoice', 'error')
-    }
+    if (invErr) { console.error(invErr); return addToast('Failed to create invoice', 'error') }
 
-    // 3. Create line items
     const items = lineItems.map(l => ({
-      invoice_id: inv.id,
-      inventory_id: l.batch_id,
-      product_id: l.product_id,
-      quantity: l.quantity,
-      unit_price: l.unit_price
+      invoice_id: inv.id, inventory_id: l.batch_id, product_id: l.product_id, quantity: l.quantity, unit_price: l.unit_price
     }))
 
     const { error: itemErr } = await supabase.from('invoice_items').insert(items)
-    if (itemErr) {
-      console.error(itemErr)
-      return addToast('Failed to add line items', 'error')
-    }
+    if (itemErr) { console.error(itemErr); return addToast('Failed to add line items', 'error') }
 
     addToast(`Invoice ${invoiceNumber} created as Draft`)
     setShowModal(false)
@@ -159,35 +130,26 @@ export default function Invoices({ addToast }) {
   const finalizeInvoice = async (invoice) => {
     if (invoice.status === 'Finalized') return
 
-    // 1. Fetch line items for this invoice
     const { data: items } = await supabase.from('invoice_items').select('*').eq('invoice_id', invoice.id)
     if (!items || items.length === 0) return addToast('No items on this invoice', 'error')
 
-    // 2. Deduct each batch
     for (const item of items) {
       const { data: batch } = await supabase.from('inventory').select('*').eq('id', item.inventory_id).single()
       if (!batch) continue
 
       const newQty = batch.quantity - item.quantity
       if (newQty <= 0) {
-        // Fully sold — mark as Sold
+        // Fully sold
         await supabase.from('inventory').update({
-          quantity: 0,
-          status: 'Sold',
-          sold_to_client: invoice.client_id,
-          sold_date: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          quantity: 0, status: 'Sold', location: `Sold to: ${invoice.client?.name || 'Organization'}`,
+          sold_to_client: invoice.client_id, sold_date: new Date().toISOString(), updated_at: new Date().toISOString()
         }).eq('id', batch.id)
       } else {
-        // Partially sold — just reduce quantity
-        await supabase.from('inventory').update({
-          quantity: newQty,
-          updated_at: new Date().toISOString()
-        }).eq('id', batch.id)
+        // Partially sold
+        await supabase.from('inventory').update({ quantity: newQty, updated_at: new Date().toISOString() }).eq('id', batch.id)
       }
     }
 
-    // 3. Mark invoice as finalized
     await supabase.from('invoices').update({ status: 'Finalized' }).eq('id', invoice.id)
     addToast(`Invoice ${invoice.invoice_number} finalized. Stock deducted.`)
     fetchInvoices()
@@ -198,10 +160,7 @@ export default function Invoices({ addToast }) {
   if (statusFilter !== 'All') filtered = filtered.filter(i => i.status === statusFilter)
   if (search) {
     const s = search.toLowerCase()
-    filtered = filtered.filter(i =>
-      i.invoice_number?.toLowerCase().includes(s) ||
-      i.client?.name?.toLowerCase().includes(s)
-    )
+    filtered = filtered.filter(i => i.invoice_number?.toLowerCase().includes(s) || i.client?.name?.toLowerCase().includes(s))
   }
 
   return (
@@ -216,7 +175,6 @@ export default function Invoices({ addToast }) {
         </button>
       </div>
 
-      {/* Filters */}
       <div style={{ display: 'flex', gap: 'var(--space-md)', marginBottom: 'var(--space-lg)', flexWrap: 'wrap', alignItems: 'center' }}>
         <div className="table-search">
           <Search size={16} />
@@ -224,20 +182,17 @@ export default function Invoices({ addToast }) {
         </div>
         <div className="filters-row">
           {['All', 'Draft', 'Finalized'].map(s => (
-            <button key={s} className={`filter-chip ${statusFilter === s ? 'active' : ''}`} onClick={() => setStatusFilter(s)}>
-              {s}
-            </button>
+            <button key={s} className={`filter-chip ${statusFilter === s ? 'active' : ''}`} onClick={() => setStatusFilter(s)}>{s}</button>
           ))}
         </div>
       </div>
 
-      {/* Invoice Table */}
       <div className="table-container">
         <table className="data-table">
           <thead>
             <tr>
               <th>Invoice #</th>
-              <th>Client</th>
+              <th>Organization</th>
               <th>Date</th>
               <th>Total</th>
               <th>Status</th>
@@ -253,15 +208,16 @@ export default function Invoices({ addToast }) {
                 <td style={{ fontWeight: 500 }}>{inv.client?.name || '—'}</td>
                 <td style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>{new Date(inv.created_at).toLocaleDateString()}</td>
                 <td style={{ fontWeight: 700, color: 'var(--primary-700)' }}>${inv.total_amount?.toLocaleString()}</td>
+                <td><span className={`badge ${inv.status === 'Finalized' ? 'badge-success' : 'badge-warning'}`}>{inv.status}</span></td>
                 <td>
-                  <span className={`badge ${inv.status === 'Finalized' ? 'badge-success' : 'badge-warning'}`}>{inv.status}</span>
-                </td>
-                <td>
-                  {inv.status === 'Draft' && (
-                    <button className="btn btn-primary" style={{ padding: '4px 10px', fontSize: '0.75rem' }} onClick={() => finalizeInvoice(inv)}>
-                      <CheckCircle size={13} /> Finalize
-                    </button>
-                  )}
+                  <div className="actions-cell">
+                    <button onClick={() => viewDetails(inv)} title="View Details"><Eye size={15} /></button>
+                    {inv.status === 'Draft' && (
+                      <button className="btn btn-primary" style={{ padding: '4px 8px', fontSize: '0.75rem', marginLeft: 8 }} onClick={() => finalizeInvoice(inv)}>
+                        <CheckCircle size={13} style={{ marginRight: 4 }}/> Finalize
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -269,65 +225,120 @@ export default function Invoices({ addToast }) {
         </table>
       </div>
 
+      {/* Invoice Details Modal */}
+      <Modal isOpen={!!showDetails} onClose={() => setShowDetails(null)} title={`Invoice ${showDetails?.invoice_number || ''}`} wide>
+        {showDetails && (
+          <div className="modal-body">
+            <div className="form-row" style={{ marginBottom: 'var(--space-lg)', paddingBottom: 'var(--space-md)', borderBottom: '1px solid var(--border-primary)' }}>
+              <div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', textTransform: 'uppercase', fontWeight: 700, marginBottom: 4 }}>Billed To (Organization)</div>
+                <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '1.1rem' }}>{showDetails.client?.name}</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span className={`badge ${showDetails.status === 'Finalized' ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '0.85rem', padding: '6px 16px' }}>
+                  {showDetails.status}
+                </span>
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-tertiary)', marginTop: 8 }}>
+                  Created: {new Date(showDetails.created_at).toLocaleDateString()}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+              <table className="line-items-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead style={{ background: 'var(--bg-secondary)' }}>
+                  <tr>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Product</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Batch Info</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Qty</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Unit Price</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {showDetails.lineItems?.map((li, i) => (
+                    <tr key={i} style={{ borderTop: '1px solid var(--border-primary)' }}>
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{li.products?.name}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{li.products?.item_code}</div>
+                      </td>
+                      <td style={{ padding: '12px 16px', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                        {li.products?.item_type === 'Instrument' ? `SN: ${li.inventory?.serial_number || 'N/A'}` : `LOT: ${li.inventory?.lot_number || 'N/A'}`}
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>{li.quantity}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>${li.unit_price?.toLocaleString()}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, color: 'var(--primary-700)' }}>${(li.quantity * li.unit_price).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 'var(--space-lg)' }}>
+              <div style={{ flex: 1, paddingRight: 'var(--space-2xl)' }}>
+                {showDetails.notes && (
+                  <>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: 4 }}>Notes</div>
+                    <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', background: 'var(--bg-secondary)', padding: 'var(--space-md)', borderRadius: 'var(--radius-sm)' }}>{showDetails.notes}</div>
+                  </>
+                )}
+              </div>
+              <div style={{ textAlign: 'right', minWidth: 200 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: 800 }}>
+                  <span>Total</span>
+                  <span style={{ color: 'var(--primary-700)' }}>${showDetails.total_amount?.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={() => setShowDetails(null)}>Close</button>
+        </div>
+      </Modal>
+
       {/* Create Invoice Modal */}
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Create Invoice">
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Create Draft Invoice" wide>
         <div className="modal-body">
-          
           <div className="form-row">
             <div className="form-group" style={{ flex: 1 }}>
-              <label>Client</label>
-              <select className="form-input" value={form.client_id} onChange={e => setForm({ ...form, client_id: e.target.value })}>
-                <option value="">-- Select Client --</option>
-                {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              <label>Select Contact Person *</label>
+              <select className="form-input" value={form.contact_id} onChange={e => setForm({ ...form, contact_id: e.target.value })}>
+                <option value="">-- Choose Contact --</option>
+                {contacts.map(c => <option key={c.id} value={c.id}>{c.first_name} {c.last_name} ({c.clients?.name})</option>)}
               </select>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: 6 }}>
+                The invoice will automatically be addressed to their Organization.
+              </div>
+            </div>
+            <div className="form-group" style={{ flex: 1 }}>
+              <label>Internal Notes (optional)</label>
+              <input className="form-input" placeholder="PO number, references..." value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
             </div>
           </div>
 
-          <div className="form-group">
-            <label>Notes (optional)</label>
-            <input className="form-input" placeholder="PO number, reference, etc." value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
-          </div>
-
-          {/* Add Line Items */}
           <div style={{ borderTop: '1px solid var(--border-primary)', marginTop: 'var(--space-md)', paddingTop: 'var(--space-md)' }}>
-            <label style={{ fontWeight: 600, marginBottom: 'var(--space-sm)', display: 'block' }}>Line Items</label>
-            
-            {/* Product Search */}
+            <label style={{ fontWeight: 600, marginBottom: 'var(--space-sm)', display: 'block' }}>Add Line Items</label>
             <div style={{ position: 'relative', marginBottom: 'var(--space-md)' }}>
-              <input
-                className="form-input"
-                placeholder="Search product to add..."
-                value={productSearch}
-                onChange={e => { setProductSearch(e.target.value); setShowProductDropdown(true) }}
-                onFocus={() => setShowProductDropdown(true)}
-              />
+              <input className="form-input" placeholder="Search product to add..." value={productSearch}
+                onChange={e => { setProductSearch(e.target.value); setShowProductDropdown(true) }} onFocus={() => setShowProductDropdown(true)} />
+              
               {showProductDropdown && productSearch.length > 0 && (
                 <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, maxHeight: 250, overflowY: 'auto', background: 'var(--bg-primary)', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', marginTop: 4 }}>
-                  {allProducts
-                    .filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()) || p.item_code.toLowerCase().includes(productSearch.toLowerCase()))
-                    .map(p => (
-                      <div key={p.id}>
-                        <div style={{ padding: '6px 12px', background: 'var(--bg-secondary)', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-primary)' }}>
-                          {p.name} <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>({p.item_code})</span>
-                        </div>
-                        {p.available_batches.length === 0 ? (
-                          <div style={{ padding: '6px 12px 10px', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>No available batches</div>
-                        ) : p.available_batches.map(batch => (
-                          <div
-                            key={batch.id}
-                            className="row-hover"
-                            style={{ padding: '6px 12px 6px 24px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', borderBottom: '1px solid var(--border-primary)' }}
-                            onClick={() => addLineItem(p, batch)}
-                          >
-                            <span style={{ fontFamily: 'var(--font-mono)' }}>
-                              {p.item_type === 'Instrument' ? `SN: ${batch.serial_number || 'N/A'}` : `LOT: ${batch.lot_number || 'N/A'}`}
-                              <span style={{ color: 'var(--text-tertiary)', marginLeft: 8 }}>Qty: {batch.quantity}</span>
-                            </span>
-                            <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>+ Add</span>
-                          </div>
-                        ))}
+                  {allProducts.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()) || p.item_code.toLowerCase().includes(productSearch.toLowerCase())).map(p => (
+                    <div key={p.id}>
+                      <div style={{ padding: '6px 12px', background: 'var(--bg-secondary)', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                        {p.name} <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem' }}>({p.item_code})</span>
                       </div>
-                    ))}
+                      {p.available_batches.length === 0 ? <div style={{ padding: '6px 12px 10px', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>No available batches</div> : null}
+                      {p.available_batches.map(batch => (
+                        <div key={batch.id} className="row-hover" style={{ padding: '6px 12px 6px 24px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', borderBottom: '1px solid var(--border-primary)' }} onClick={() => addLineItem(p, batch)}>
+                          <span style={{ fontFamily: 'var(--font-mono)' }}>{p.item_type === 'Instrument' ? `SN: ${batch.serial_number || 'N/A'}` : `LOT: ${batch.lot_number || 'N/A'}`} <span style={{ color: 'var(--text-tertiary)', marginLeft: 8 }}>Qty: {batch.quantity}</span></span>
+                          <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>+ Add</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
                   {allProducts.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()) || p.item_code.toLowerCase().includes(productSearch.toLowerCase())).length === 0 && (
                     <div style={{ padding: 'var(--space-md)', color: 'var(--text-tertiary)', textAlign: 'center', fontSize: '0.85rem' }}>No matching products</div>
                   )}
@@ -335,11 +346,10 @@ export default function Invoices({ addToast }) {
               )}
             </div>
 
-            {/* Line Item List */}
             {lineItems.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 'var(--space-lg)', color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>
-                <Package size={24} style={{ marginBottom: 8, opacity: 0.4 }} /><br/>
-                Search and click batches above to add line items
+              <div style={{ textAlign: 'center', padding: 'var(--space-xl)', color: 'var(--text-tertiary)', fontSize: '0.85rem', background: 'var(--bg-separator)', borderRadius: 'var(--radius-md)' }}>
+                <Package size={32} style={{ marginBottom: 12, opacity: 0.4 }} /><br/>
+                Search and click batches above to add them to this invoice
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
@@ -351,42 +361,23 @@ export default function Invoices({ addToast }) {
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}>
                       <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>Qty</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max={line.max_qty}
-                        value={line.quantity}
-                        disabled={line.item_type === 'Instrument'}
-                        onChange={e => updateLineQty(idx, e.target.value)}
-                        style={{ width: 50, padding: '2px 4px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', textAlign: 'center', fontSize: '0.85rem' }}
-                      />
+                      <input type="number" min="1" max={line.max_qty} value={line.quantity} disabled={line.item_type === 'Instrument'} onChange={e => updateLineQty(idx, e.target.value)} style={{ width: 50, padding: '2px 4px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', textAlign: 'center' }} />
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}>
                       <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>$</label>
-                      <input
-                        type="number"
-                        value={line.unit_price}
-                        onChange={e => updateLinePrice(idx, e.target.value)}
-                        style={{ width: 70, padding: '2px 4px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', textAlign: 'center', fontSize: '0.85rem' }}
-                      />
+                      <input type="number" value={line.unit_price} onChange={e => updateLinePrice(idx, e.target.value)} style={{ width: 70, padding: '2px 4px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', textAlign: 'center' }} />
                     </div>
-                    <div style={{ fontWeight: 700, minWidth: 70, textAlign: 'right', color: 'var(--primary-700)' }}>
-                      ${(line.quantity * line.unit_price).toLocaleString()}
-                    </div>
-                    <button className="btn-icon" onClick={() => removeLineItem(idx)} style={{ color: 'var(--status-danger)', padding: 4 }}>
-                      <Trash2 size={14} />
-                    </button>
+                    <div style={{ fontWeight: 700, minWidth: 70, textAlign: 'right', color: 'var(--primary-700)' }}>${(line.quantity * line.unit_price).toLocaleString()}</div>
+                    <button className="btn-icon" onClick={() => removeLineItem(idx)} style={{ color: 'var(--status-danger)', padding: 4 }}><Trash2 size={14} /></button>
                   </div>
                 ))}
-                {/* Total */}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 'var(--space-md)', padding: '10px 10px 0', borderTop: '1px solid var(--border-primary)', marginTop: 'var(--space-xs)' }}>
                   <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Total:</span>
-                  <span style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--primary-700)' }}>${totalAmount.toLocaleString()}</span>
+                  <span style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--primary-700)' }}>${totalAmount.toLocaleString()}</span>
                 </div>
               </div>
             )}
           </div>
-
         </div>
         <div className="modal-footer">
           <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>

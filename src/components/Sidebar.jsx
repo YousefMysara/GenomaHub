@@ -19,7 +19,7 @@ const navItems = [
   { path: '/inventory', icon: Warehouse, label: 'Inventory' },
   { path: '/quotations', icon: FileText, label: 'Quotations' },
   { path: '/invoices', icon: Receipt, label: 'Invoices' },
-  { path: '/clients', icon: Users, label: 'Clients' },
+  { path: '/organizations', icon: Users, label: 'Organizations' },
   { path: '/alerts', icon: Bell, label: 'Alerts' },
 ]
 

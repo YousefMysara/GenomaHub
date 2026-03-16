@@ -13,7 +13,8 @@ import Catalog from './pages/Catalog'
 import Inventory from './pages/Inventory'
 import ProductDetails from './pages/ProductDetails'
 import Quotations from './pages/Quotations'
-import Clients from './pages/Clients'
+import Organizations from './pages/Organizations'
+import OrganizationDetails from './pages/OrganizationDetails'
 import Alerts from './pages/Alerts'
 import Invoices from './pages/Invoices'
 import ToastContainer from './components/Toast'
@@ -40,7 +41,8 @@ export default function App() {
           <Route path="/catalog/:id" element={<ProductDetails addToast={addToast} />} />
           <Route path="/inventory" element={<Inventory addToast={addToast} />} />
           <Route path="/quotations" element={<Quotations addToast={addToast} />} />
-          <Route path="/clients" element={<Clients addToast={addToast} />} />
+          <Route path="/organizations" element={<Organizations addToast={addToast} />} />
+          <Route path="/organizations/:id" element={<OrganizationDetails addToast={addToast} />} />
           <Route path="/alerts" element={<Alerts addToast={addToast} />} />
           <Route path="/invoices" element={<Invoices addToast={addToast} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
