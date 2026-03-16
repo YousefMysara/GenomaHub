@@ -15,6 +15,7 @@ import ProductDetails from './pages/ProductDetails'
 import Quotations from './pages/Quotations'
 import Clients from './pages/Clients'
 import Alerts from './pages/Alerts'
+import Invoices from './pages/Invoices'
 import ToastContainer from './components/Toast'
 
 export default function App() {
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="/quotations" element={<Quotations addToast={addToast} />} />
           <Route path="/clients" element={<Clients addToast={addToast} />} />
           <Route path="/alerts" element={<Alerts addToast={addToast} />} />
+          <Route path="/invoices" element={<Invoices addToast={addToast} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

@@ -10,7 +10,7 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Package, Warehouse, FileText,
-  Users, Bell, ChevronLeft, ChevronRight, Dna
+  Users, Bell, ChevronLeft, ChevronRight, Dna, Receipt
 } from 'lucide-react'
 
 const navItems = [
@@ -18,6 +18,7 @@ const navItems = [
   { path: '/catalog', icon: Package, label: 'Catalog' },
   { path: '/inventory', icon: Warehouse, label: 'Inventory' },
   { path: '/quotations', icon: FileText, label: 'Quotations' },
+  { path: '/invoices', icon: Receipt, label: 'Invoices' },
   { path: '/clients', icon: Users, label: 'Clients' },
   { path: '/alerts', icon: Bell, label: 'Alerts' },
 ]
