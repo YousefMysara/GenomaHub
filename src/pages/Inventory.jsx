@@ -20,6 +20,7 @@ export default function Inventory({ addToast }) {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('All')
   const [stockFilter, setStockFilter] = useState('All')
+  const [brandFilter, setBrandFilter] = useState('All')
   const [showInactive, setShowInactive] = useState(false)
 
   const [expandedRows, setExpandedRows] = useState(new Set())
@@ -48,7 +49,6 @@ export default function Inventory({ addToast }) {
     const { data: pData, error: pErr } = await supabase
       .from('products')
       .select('*, brands(name)')
-      .eq('track_stock', true)
       .order('name')
     if (pErr) return console.error(pErr)
 
@@ -67,6 +67,7 @@ export default function Inventory({ addToast }) {
     setCatalogItems(result)
 
     if (typeFilter !== 'All') result = result.filter(r => r.item_type === typeFilter)
+    if (brandFilter !== 'All') result = result.filter(r => (r.brand_name || 'Generic') === brandFilter)
     if (search) {
       const s = search.toLowerCase()
       result = result.filter(r =>
@@ -77,6 +78,7 @@ export default function Inventory({ addToast }) {
     }
     if (stockFilter !== 'All') {
       result = result.filter(r => {
+        if (!r.track_stock) return stockFilter === 'ok' // Non-tracked items are technically never "low" or "out" of stock, assume OK.
         if (stockFilter === 'ok') return r.total_qty > r.reorder_level
         if (stockFilter === 'low') return r.total_qty <= r.reorder_level && r.total_qty > 0
         if (stockFilter === 'out') return r.total_qty === 0
@@ -87,7 +89,7 @@ export default function Inventory({ addToast }) {
     setProducts(result)
   }
 
-  useEffect(() => { fetchInventory() }, [typeFilter, stockFilter, search])
+  useEffect(() => { fetchInventory() }, [typeFilter, stockFilter, brandFilter, search])
 
   const handleDeleteBatch = async () => {
     if (!deletingBatch) return
@@ -151,13 +153,13 @@ export default function Inventory({ addToast }) {
 
     if (selectedProduct?.item_type === 'Instrument') {
       if (!form.serial_number?.trim()) return addToast('Serial Number is required', 'error')
-      
+
       // Check unique SN globally
       let query = supabase.from('inventory').select('id').eq('serial_number', form.serial_number.trim())
       if (editingBatch) query = query.neq('id', editingBatch.id)
       const { data: existingSN } = await query
       if (existingSN && existingSN.length > 0) return addToast('Error: This Serial Number is already registered', 'error')
-      
+
       body.serial_number = form.serial_number.trim()
     } else {
       if (!form.lot_number?.trim()) return addToast('Lot Number is required', 'error')
@@ -198,12 +200,14 @@ export default function Inventory({ addToast }) {
 
   const TYPE_FILTERS = ['All', 'Instrument', 'Spare Parts', 'Kit', 'Chemical', 'Control', 'Labware', 'General', 'License', 'Maintenance']
   const STOCK_FILTERS = [{ key: 'All', label: 'All' }, { key: 'ok', label: '✓ Healthy' }, { key: 'low', label: '⚠ Low' }, { key: 'out', label: '✗ Out' }]
+  // Derive unique brands from loaded catalog
+  const AVAILABLE_BRANDS = ['All', ...Array.from(new Set(catalogItems.map(c => c.brand_name || 'Generic'))).sort()]
 
   return (
     <div className="animate-fade-in">
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <h1>Inventory Batch Manager</h1>
+          <h1>Inventory Management</h1>
           <p>Track stock levels, shipments, lots, and serial numbers in real time</p>
         </div>
         <button className="btn btn-primary" onClick={openReceiveStock}>
@@ -212,41 +216,48 @@ export default function Inventory({ addToast }) {
       </div>
 
       {/* ── Filters ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)', marginBottom: 'var(--space-lg)' }}>
+      <div style={{ display: 'flex', gap: 'var(--space-md)', marginBottom: 'var(--space-lg)', flexWrap: 'wrap', alignItems: 'center', background: 'var(--bg-secondary)', padding: 'var(--space-md)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-primary)' }}>
         {/* Search */}
-        <div className="table-search" style={{ maxWidth: 360 }}>
+        <div className="table-search" style={{ flex: '1 1 250px', margin: 0 }}>
           <Search size={16} />
           <input placeholder="Search products, lot #, serial #..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
 
-        {/* Type filter — full taxonomy */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-          <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-tertiary)', marginRight: 6, letterSpacing: '0.05em' }}>TYPE</span>
-          {TYPE_FILTERS.map(t => (
-            <button key={t} className={`filter-chip ${typeFilter === t ? 'active' : ''}`} onClick={() => setTypeFilter(t)} style={{ fontSize: '0.75rem', padding: '3px 9px' }}>
-              {t === 'All' ? 'All Types' : t}
-            </button>
-          ))}
+        {/* Type filter */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>TYPE</span>
+          <select className="form-input" style={{ width: 140, padding: '7px 10px', fontSize: '0.85rem' }} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+            {TYPE_FILTERS.map(t => <option key={t} value={t}>{t === 'All' ? 'All Types' : t}</option>)}
+          </select>
         </div>
 
-        {/* Stock filter + inactive toggle */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-          <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-tertiary)', marginRight: 6, letterSpacing: '0.05em' }}>STOCK</span>
-          {STOCK_FILTERS.map(s => (
-            <button key={s.key} className={`filter-chip ${stockFilter === s.key ? 'active' : ''}`} onClick={() => setStockFilter(s.key)} style={{ fontSize: '0.75rem', padding: '3px 9px' }}>
-              {s.label}
-            </button>
-          ))}
-          <span style={{ margin: '0 4px', color: 'var(--border-secondary)' }}>|</span>
-          <button
-            className={`filter-chip ${showInactive ? 'active' : ''}`}
-            onClick={() => setShowInactive(!showInactive)}
-            style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', padding: '3px 9px', color: showInactive ? 'var(--status-warning)' : undefined }}
-          >
-            {showInactive ? <Eye size={12}/> : <EyeOff size={12}/>}
-            {showInactive ? 'Showing' : 'Show'} Defective & Expired
-          </button>
+        {/* Brand filter */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>BRAND</span>
+          <select className="form-input" style={{ width: 140, padding: '7px 10px', fontSize: '0.85rem' }} value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)}>
+            {AVAILABLE_BRANDS.map(b => <option key={b} value={b}>{b === 'All' ? 'All Brands' : b}</option>)}
+          </select>
         </div>
+
+        {/* Stock filter */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>STOCK</span>
+          <select className="form-input" style={{ width: 120, padding: '7px 10px', fontSize: '0.85rem' }} value={stockFilter} onChange={(e) => setStockFilter(e.target.value)}>
+             {STOCK_FILTERS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select>
+        </div>
+
+        <div style={{ width: 1, height: 24, background: 'var(--border-secondary)', margin: '0 4px' }} />
+
+        {/* Inactive toggle */}
+        <button
+          className={`btn-ghost ${showInactive ? 'active' : ''}`}
+          onClick={() => setShowInactive(!showInactive)}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', color: showInactive ? 'var(--status-warning)' : 'var(--text-secondary)' }}
+        >
+          {showInactive ? <Eye size={16} /> : <EyeOff size={16} />}
+          {showInactive ? 'Hide Expired/Removed/Sold' : 'Show Expired/Removed/Sold'}
+        </button>
       </div>
 
       {/* ── Bulk inventory table ── */}
@@ -258,8 +269,8 @@ export default function Inventory({ addToast }) {
               <th>Master Product</th>
               <th>Code / Vendor</th>
               <th>Type</th>
-              <th title="Click to edit">Min. Qty</th>
-              <th>On Hand</th>
+              <th title="Click to edit" style={{ textAlign: 'center' }}>Min. Qty</th>
+              <th style={{ textAlign: 'center' }}>On Hand</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -287,34 +298,38 @@ export default function Inventory({ addToast }) {
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{p.brand_name || 'Generic'}</div>
                     </td>
                     <td><span className={`badge ${p.item_type === 'Instrument' ? 'badge-equipment' : 'badge-kit'}`}>{p.item_type}</span></td>
-                    <td>
-                      <input
-                        type="number"
-                        defaultValue={p.reorder_level}
-                        title="Click to edit minimum quantity"
-                        style={{ width: 52, background: 'transparent', border: '1px solid transparent', borderRadius: 'var(--radius-sm)', padding: '2px 6px', fontSize: '0.9rem', color: 'var(--text-tertiary)', textAlign: 'center', transition: 'all 0.2s' }}
-                        onFocus={e => { e.target.style.borderColor = 'var(--border-secondary)'; e.target.style.background = 'var(--bg-secondary)' }}
-                        onBlur={async e => {
-                          e.target.style.borderColor = 'transparent'; e.target.style.background = 'transparent'
-                          const val = parseInt(e.target.value) || 0
-                          if (val !== p.reorder_level) {
-                            await supabase.from('products').update({ reorder_level: val }).eq('id', p.id)
-                            addToast('Reorder level updated')
-                            fetchInventory()
-                          }
-                        }}
-                        onKeyDown={e => { if (e.key === 'Enter') e.target.blur() }}
-                      />
+                    <td style={{ textAlign: 'center' }}>
+                      {p.track_stock ? (
+                        <input
+                          type="number"
+                          defaultValue={p.reorder_level}
+                          title="Click to edit minimum quantity"
+                          style={{ width: 52, background: 'transparent', border: '1px solid transparent', borderRadius: 'var(--radius-sm)', padding: '2px 6px', fontSize: '0.9rem', color: 'var(--text-tertiary)', textAlign: 'center', transition: 'all 0.2s', margin: '0 auto', display: 'block' }}
+                          onFocus={e => { e.target.style.borderColor = 'var(--border-secondary)'; e.target.style.background = 'var(--bg-secondary)' }}
+                          onBlur={async e => {
+                            e.target.style.borderColor = 'transparent'; e.target.style.background = 'transparent'
+                            const val = parseInt(e.target.value) || 0
+                            if (val !== p.reorder_level) {
+                              await supabase.from('products').update({ reorder_level: val }).eq('id', p.id)
+                              addToast('Reorder level updated')
+                              fetchInventory()
+                            }
+                          }}
+                          onKeyDown={e => { if (e.key === 'Enter') e.target.blur() }}
+                        />
+                      ) : <div style={{ color: 'var(--text-tertiary)' }}>—</div>}
                     </td>
-                    <td style={{ fontWeight: 800, fontSize: '1.1rem', color: isOut ? 'var(--status-danger)' : hasLowStock ? 'var(--status-warning)' : 'var(--text-primary)' }}>
+                    <td style={{ fontWeight: 800, fontSize: '1.1rem', textAlign: 'center', color: !p.track_stock ? 'var(--text-tertiary)' : isOut ? 'var(--status-danger)' : hasLowStock ? 'var(--status-warning)' : 'var(--text-primary)' }}>
                       {p.total_qty}
                     </td>
                     <td>
-                      {isOut
-                        ? <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--status-danger)', fontSize: '0.8rem', fontWeight: 600 }}><AlertTriangle size={14}/> OUT</span>
-                        : hasLowStock
-                          ? <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--status-warning)', fontSize: '0.8rem', fontWeight: 600 }}><AlertTriangle size={14}/> LOW</span>
-                          : <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--status-success)', fontSize: '0.8rem', fontWeight: 600 }}><CheckCircle size={14}/> OK</span>}
+                      {!p.track_stock 
+                        ? <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-tertiary)', fontSize: '0.8rem', fontWeight: 600 }}>NOT TRACKED</span>
+                        : isOut
+                          ? <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--status-danger)', fontSize: '0.8rem', fontWeight: 600 }}><AlertTriangle size={14} /> OUT</span>
+                          : hasLowStock
+                            ? <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--status-warning)', fontSize: '0.8rem', fontWeight: 600 }}><AlertTriangle size={14} /> LOW</span>
+                            : <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--status-success)', fontSize: '0.8rem', fontWeight: 600 }}><CheckCircle size={14} /> OK</span>}
                     </td>
                     <td>
                       <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.75rem' }} onClick={() => {
@@ -336,7 +351,7 @@ export default function Inventory({ addToast }) {
                           {(() => {
                             const activeBatches = showInactive
                               ? p.batches
-                              : p.batches.filter(b => !['Quarantined', 'Expired', 'Removed'].includes(b.status))
+                              : p.batches.filter(b => !['Quarantined', 'Expired', 'Removed', 'Sold'].includes(b.status))
 
                             if (p.batches.length === 0) return (
                               <div style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)', textAlign: 'center' }}>
@@ -346,7 +361,7 @@ export default function Inventory({ addToast }) {
 
                             if (activeBatches.length === 0) return (
                               <div style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)', textAlign: 'center', padding: 'var(--space-sm)' }}>
-                                All batches are defective / expired / removed.
+                                All batches are defective / expired / removed / sold.
                                 <button onClick={() => setShowInactive(true)} style={{ marginLeft: 8, fontSize: '0.8rem', color: 'var(--primary-700)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Show them</button>
                               </div>
                             )
@@ -385,8 +400,8 @@ export default function Inventory({ addToast }) {
                                         <td style={{ padding: '8px 0' }}>
                                           {batch.expiry_date
                                             ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: isExpiring ? 'var(--status-danger)' : 'var(--text-secondary)', fontWeight: isExpiring ? 600 : 400 }}>
-                                                {isExpiring && <Clock size={12}/>} {batch.expiry_date}
-                                              </span>
+                                              {isExpiring && <Clock size={12} />} {batch.expiry_date}
+                                            </span>
                                             : '—'}
                                         </td>
                                         <td style={{ padding: '8px 0', fontSize: '0.75rem', color: 'var(--text-tertiary)', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={batch.notes}>
@@ -394,7 +409,7 @@ export default function Inventory({ addToast }) {
                                         </td>
                                         <td style={{ padding: '8px 0', textAlign: 'right' }}>
                                           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4 }}>
-                                            <button className="btn-icon" onClick={() => openEditBatch(p, batch)} style={{ padding: 4 }} title="Edit"><Edit2 size={14}/></button>
+                                            <button className="btn-icon" onClick={() => openEditBatch(p, batch)} style={{ padding: 4 }} title="Edit"><Edit2 size={14} /></button>
                                             {!['Removed', 'Sold'].includes(batch.status) && (
                                               <button
                                                 className="btn-icon"
@@ -402,7 +417,7 @@ export default function Inventory({ addToast }) {
                                                 style={{ padding: 4, color: 'var(--status-danger)' }}
                                                 title="Remove from inventory"
                                               >
-                                                <Trash2 size={14}/>
+                                                <Trash2 size={14} />
                                               </button>
                                             )}
                                           </div>
@@ -471,12 +486,19 @@ export default function Inventory({ addToast }) {
                 </div>
                 <div className="form-group">
                   <label>Status</label>
-                  <select className="form-input" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
+                  <select 
+                    className="form-input" 
+                    value={form.status} 
+                    onChange={e => setForm({ ...form, status: e.target.value })}
+                    disabled={editingBatch?.status === 'Sold'}
+                  >
                     <option value="Available">Available</option>
-                    <option value="In Use">In Use / Installed</option>
                     <option value="Quarantined">Quarantined / Defective</option>
                     <option value="Expired">Expired</option>
+                    {editingBatch?.status === 'In Use' && <option value="In Use">In Use (Legacy)</option>}
+                    {editingBatch?.status === 'Sold' && <option value="Sold">Sold</option>}
                   </select>
+                  {editingBatch?.status === 'Sold' && <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: 4 }}>Status is locked because this item was sold via an invoice.</div>}
                 </div>
               </div>
 
