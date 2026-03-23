@@ -92,7 +92,7 @@ export default function Dashboard() {
       <div className="animate-fade-in">
         <div className="page-header">
           <h1>Dashboard</h1>
-          <p>Loading GenomaHub analytics...</p>
+          <p>Loading GENOMA analytics...</p>
         </div>
       </div>
     )
@@ -103,9 +103,9 @@ export default function Dashboard() {
   const { stats, recentQuotes, stockByCategory, lowStockItems, expiringItems } = data
 
   const formatCurrency = (val) => {
-    if (val >= 1000000) return `$${(val / 1000000).toFixed(1)}M`
-    if (val >= 1000) return `$${(val / 1000).toFixed(1)}K`
-    return `$${val.toFixed(0)}`
+    if (val >= 1000000) return `EGP ${(val / 1000000).toFixed(1)}M`
+    if (val >= 1000) return `EGP ${(val / 1000).toFixed(1)}K`
+    return `EGP ${val.toFixed(0)}`
   }
 
   const getStatusClass = (status) => {
@@ -124,7 +124,7 @@ export default function Dashboard() {
         <div className="page-header-row">
           <div>
             <h1>Dashboard</h1>
-            <p>Welcome to GenomaHub — your medical equipment command center</p>
+            <p>Welcome to GENOMA — your medical equipment command center</p>
           </div>
           <button className="btn btn-primary" onClick={() => navigate('/quotations')}>
             <FileText size={16} /> New Quotation
@@ -354,7 +354,7 @@ export default function Dashboard() {
                   <td style={{ color: 'var(--primary-700)', fontWeight: 600 }}>{q.quote_number}</td>
                   <td style={{ color: 'var(--text-primary)' }}>{q.client_name || '—'}</td>
                   <td><span className={`badge ${getStatusClass(q.status)}`}>{q.status}</span></td>
-                  <td style={{ fontWeight: 600 }}>${q.total?.toLocaleString()}</td>
+                  <td style={{ fontWeight: 600 }}>EGP {q.total?.toLocaleString()}</td>
                   <td>{new Date(q.date_created).toLocaleDateString()}</td>
                 </tr>
               ))}

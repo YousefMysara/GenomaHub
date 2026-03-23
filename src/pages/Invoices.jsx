@@ -207,7 +207,7 @@ export default function Invoices({ addToast }) {
                 <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-accent)' }}>{inv.invoice_number}</td>
                 <td style={{ fontWeight: 500 }}>{inv.client?.name || '—'}</td>
                 <td style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>{new Date(inv.created_at).toLocaleDateString()}</td>
-                <td style={{ fontWeight: 700, color: 'var(--primary-700)' }}>${inv.total_amount?.toLocaleString()}</td>
+                <td style={{ fontWeight: 700, color: 'var(--primary-700)' }}>EGP {inv.total_amount?.toLocaleString()}</td>
                 <td><span className={`badge ${inv.status === 'Finalized' ? 'badge-success' : 'badge-warning'}`}>{inv.status}</span></td>
                 <td>
                   <div className="actions-cell">
@@ -266,8 +266,8 @@ export default function Invoices({ addToast }) {
                         {li.products?.item_type === 'Instrument' ? `SN: ${li.inventory?.serial_number || 'N/A'}` : `LOT: ${li.inventory?.lot_number || 'N/A'}`}
                       </td>
                       <td style={{ padding: '12px 16px', textAlign: 'center' }}>{li.quantity}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>${li.unit_price?.toLocaleString()}</td>
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, color: 'var(--primary-700)' }}>${(li.quantity * li.unit_price).toLocaleString()}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>EGP {li.unit_price?.toLocaleString()}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, color: 'var(--primary-700)' }}>EGP {(li.quantity * li.unit_price).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -286,7 +286,7 @@ export default function Invoices({ addToast }) {
               <div style={{ textAlign: 'right', minWidth: 200 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: 800 }}>
                   <span>Total</span>
-                  <span style={{ color: 'var(--primary-700)' }}>${showDetails.total_amount?.toLocaleString()}</span>
+                  <span style={{ color: 'var(--primary-700)' }}>EGP {showDetails.total_amount?.toLocaleString()}</span>
                 </div>
               </div>
             </div>
@@ -364,16 +364,16 @@ export default function Invoices({ addToast }) {
                       <input type="number" min="1" max={line.max_qty} value={line.quantity} disabled={line.item_type === 'Instrument'} onChange={e => updateLineQty(idx, e.target.value)} style={{ width: 50, padding: '2px 4px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', textAlign: 'center' }} />
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-xs)' }}>
-                      <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>$</label>
+                      <label style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>EGP</label>
                       <input type="number" value={line.unit_price} onChange={e => updateLinePrice(idx, e.target.value)} style={{ width: 70, padding: '2px 4px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-primary)', textAlign: 'center' }} />
                     </div>
-                    <div style={{ fontWeight: 700, minWidth: 70, textAlign: 'right', color: 'var(--primary-700)' }}>${(line.quantity * line.unit_price).toLocaleString()}</div>
+                    <div style={{ fontWeight: 700, minWidth: 70, textAlign: 'right', color: 'var(--primary-700)' }}>EGP {(line.quantity * line.unit_price).toLocaleString()}</div>
                     <button className="btn-icon" onClick={() => removeLineItem(idx)} style={{ color: 'var(--status-danger)', padding: 4 }}><Trash2 size={14} /></button>
                   </div>
                 ))}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 'var(--space-md)', padding: '10px 10px 0', borderTop: '1px solid var(--border-primary)', marginTop: 'var(--space-xs)' }}>
                   <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Total:</span>
-                  <span style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--primary-700)' }}>${totalAmount.toLocaleString()}</span>
+                  <span style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--primary-700)' }}>EGP {totalAmount.toLocaleString()}</span>
                 </div>
               </div>
             )}

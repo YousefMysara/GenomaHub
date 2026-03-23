@@ -10,7 +10,7 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, Package, Warehouse, FileText,
-  Users, Bell, ChevronLeft, ChevronRight, Dna, Receipt, Target
+  Users, Bell, ChevronLeft, ChevronRight, Dna, Receipt, Target, Settings as SettingsIcon
 } from 'lucide-react'
 
 const navItems = [
@@ -22,6 +22,7 @@ const navItems = [
   { path: '/sales-pipeline', icon: Target, label: 'Sales Pipeline' },
   { path: '/organizations', icon: Users, label: 'Organizations' },
   { path: '/alerts', icon: Bell, label: 'Alerts' },
+  { path: '/settings', icon: SettingsIcon, label: 'Settings' },
 ]
 
 export default function Sidebar({ collapsed, onToggle }) {
@@ -30,11 +31,17 @@ export default function Sidebar({ collapsed, onToggle }) {
   return (
     <aside className={`sidebar ${collapsed ? 'sidebar-collapsed' : ''}`}>
       <div className="sidebar-header">
-        <div className="sidebar-logo">
-          <div className="logo-icon">
-            <Dna size={24} />
-          </div>
-          {!collapsed && <span className="logo-text">GenomaHub</span>}
+        <div className="sidebar-logo" style={{ padding: collapsed ? '0' : '0 4px' }}>
+          <img
+            src={collapsed ? "https://ewrkclcpbhysgnvmnkrt.supabase.co/storage/v1/object/public/site-media/GENOMA_Icon.png" : "https://ewrkclcpbhysgnvmnkrt.supabase.co/storage/v1/object/public/site-media/GENOMA_Logo_Wide.png"}
+            alt="GENOMA"
+            style={{
+              width: collapsed ? '32px' : '100%',
+              height: 'auto',
+              maxHeight: '60px',
+              objectFit: 'contain'
+            }}
+          />
         </div>
       </div>
 

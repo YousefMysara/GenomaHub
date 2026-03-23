@@ -222,7 +222,7 @@ export default function OrganizationDetails({ addToast }) {
                     q.status === 'Draft' ? 'badge-draft' : q.status === 'Sent' ? 'badge-info' :
                     q.status === 'Accepted' ? 'badge-success' : 'badge-danger'
                   }`}>{q.status}</span></td>
-                  <td style={{ fontWeight: 700 }}>${q.total?.toLocaleString()}</td>
+                  <td style={{ fontWeight: 700 }}>EGP {q.total?.toLocaleString()}</td>
                   <td>{q.validity_days} days</td>
                   <td style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>{new Date(q.date_created).toLocaleDateString()}</td>
                 </tr>
@@ -243,7 +243,7 @@ export default function OrganizationDetails({ addToast }) {
                 <tr key={i.id}>
                   <td style={{ fontWeight: 600, color: 'var(--text-accent)' }}>{i.invoice_number}</td>
                   <td><span className={`badge ${i.status === 'Finalized' ? 'badge-success' : 'badge-warning'}`}>{i.status}</span></td>
-                  <td style={{ fontWeight: 700 }}>${i.total_amount?.toLocaleString()}</td>
+                  <td style={{ fontWeight: 700 }}>EGP {i.total_amount?.toLocaleString()}</td>
                   <td style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)' }}>{new Date(i.created_at).toLocaleDateString()}</td>
                 </tr>
               ))}

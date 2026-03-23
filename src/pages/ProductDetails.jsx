@@ -217,7 +217,7 @@ export default function ProductDetails({ addToast }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>
           {/* Price + brand compact */}
           <div style={{ textAlign: 'right', marginRight: 'var(--space-sm)' }}>
-            <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--primary-700)' }}>${product.base_price?.toLocaleString()}</div>
+            <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--primary-700)' }}>EGP {product.base_price?.toLocaleString()}</div>
             {brandName && <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{brandName}</div>}
           </div>
           <button className="btn btn-secondary" onClick={openEdit} style={{ whiteSpace: 'nowrap' }}>
@@ -274,7 +274,7 @@ export default function ProductDetails({ addToast }) {
                       <div style={{ fontWeight: 500, fontSize: '0.85rem' }}>{acc.name}</div>
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{acc.item_code}</div>
                     </div>
-                    <div style={{ fontWeight: 700, color: 'var(--primary-700)', fontSize: '0.9rem' }}>${acc.base_price?.toLocaleString()}</div>
+                    <div style={{ fontWeight: 700, color: 'var(--primary-700)', fontSize: '0.9rem' }}>EGP {acc.base_price?.toLocaleString()}</div>
                   </div>
                 ))}
               </div>
@@ -445,7 +445,7 @@ export default function ProductDetails({ addToast }) {
               <input className="form-input" value={editForm.item_code || ''} onChange={e => setEditForm({ ...editForm, item_code: e.target.value })} />
             </div>
             <div className="form-group">
-              <label>Base Price ($) *</label>
+              <label>Base Price (EGP) *</label>
               <input className="form-input" type="number" value={editForm.base_price || ''} onChange={e => setEditForm({ ...editForm, base_price: e.target.value })} />
             </div>
           </div>

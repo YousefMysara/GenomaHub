@@ -31,9 +31,6 @@ export default function SalesPipeline({ addToast }) {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [form, setForm] = useState({ title: '', contact_id: '', priority: 'Medium', source: '', expected_value: '', expected_close_date: '', assigned_to: '' })
 
-  const [showStagesModal, setShowStagesModal] = useState(false)
-  const [stageEdits, setStageEdits] = useState([])
-
   const dragLead = useRef(null)
 
   // ── Data Loading ──────────────────────────────────────────────────
@@ -135,34 +132,6 @@ export default function SalesPipeline({ addToast }) {
     dragLead.current = null
   }
 
-  // ── Configure Stages ─────────────────────────────────────────────
-  const openStagesModal = () => { setStageEdits(stages.map(s => ({ ...s }))); setShowStagesModal(true) }
-
-  const saveStages = async () => {
-    for (const s of stageEdits) {
-      if (s._new) await supabase.from('pipeline_stages').insert([{ name: s.name, position: s.position, color: s.color }])
-      else if (s._delete) {
-        if (leads.some(l => l.status === s.name)) { addToast('Cannot delete "' + s.name + '" - it has leads', 'error'); return }
-        await supabase.from('pipeline_stages').delete().eq('id', s.id)
-      } else {
-        await supabase.from('pipeline_stages').update({ name: s.name, position: s.position, color: s.color }).eq('id', s.id)
-      }
-    }
-    addToast('Stages saved')
-    setShowStagesModal(false)
-    loadData()
-  }
-
-  const addStageEdit = () => setStageEdits(prev => [...prev, { id: 'new_' + Date.now(), name: 'New Stage', position: prev.length, color: STAGE_COLORS[prev.length % STAGE_COLORS.length], _new: true }])
-  const moveStage = (i, dir) => {
-    const arr = [...stageEdits]
-    const j = i + dir
-    if (j < 0 || j >= arr.length) return
-      ;[arr[i], arr[j]] = [arr[j], arr[i]]
-    arr.forEach((s, idx) => { s.position = idx })
-    setStageEdits(arr)
-  }
-
   // ── Stats ─────────────────────────────────────────────────────────
   const now = new Date()
   const thisMonth = (d) => { const dt = new Date(d); return dt.getMonth() === now.getMonth() && dt.getFullYear() === now.getFullYear() }
@@ -203,7 +172,6 @@ export default function SalesPipeline({ addToast }) {
             <p>Track deals, manage leads, and log interactions</p>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-secondary" onClick={openStagesModal}><Settings size={15} /> Stages</button>
             <button className="btn btn-primary" onClick={() => { setForm({ title: '', contact_id: '', priority: 'Medium', source: '', expected_value: '', expected_close_date: '', assigned_to: '' }); setShowCreateModal(true) }}>
               <Plus size={16} /> New Lead
             </button>
@@ -214,8 +182,8 @@ export default function SalesPipeline({ addToast }) {
       {/* Stats Bar */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--space-md)', marginBottom: 'var(--space-lg)' }}>
         {[
-          { label: 'Active Pipeline', value: '$' + pipelineValue.toLocaleString(), sub: activeLeads.length + ' deals', color: 'var(--primary-600)', icon: <Target size={20} /> },
-          { label: 'Won This Month', value: wonThisMonth.length, sub: '$' + wonThisMonth.reduce((s, l) => s + (l.expected_value || 0), 0).toLocaleString(), color: 'var(--status-success)', icon: <Check size={20} /> },
+          { label: 'Active Pipeline', value: 'EGP ' + pipelineValue.toLocaleString(), sub: activeLeads.length + ' deals', color: 'var(--primary-600)', icon: <Target size={20} /> },
+          { label: 'Won This Month', value: wonThisMonth.length, sub: 'EGP ' + wonThisMonth.reduce((s, l) => s + (l.expected_value || 0), 0).toLocaleString(), color: 'var(--status-success)', icon: <Check size={20} /> },
           { label: 'Lost This Month', value: lostThisMonth.length, sub: 'deals lost', color: 'var(--status-danger)', icon: <X size={20} /> },
           { label: 'Closing This Month', value: closingThisMonth.length, sub: 'expected to close', color: 'var(--status-warning)', icon: <Calendar size={20} /> },
         ].map(stat => (
@@ -262,7 +230,7 @@ export default function SalesPipeline({ addToast }) {
                       <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>{stage.name}</span>
                       <span style={{ fontSize: '0.7rem', background: 'var(--bg-tertiary)', padding: '1px 6px', borderRadius: 10, color: 'var(--text-tertiary)' }}>{stageLeads.length}</span>
                     </div>
-                    {total > 0 && <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>${total.toLocaleString()}</span>}
+                    {total > 0 && <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>EGP {total.toLocaleString()}</span>}
                   </div>
                   <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 8px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {stageLeads.map(lead => (
@@ -277,7 +245,7 @@ export default function SalesPipeline({ addToast }) {
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>{lead.contacts ? lead.contacts.first_name + ' ' + lead.contacts.last_name : ''}</span>
-                          {lead.expected_value ? <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary-600)' }}>${lead.expected_value.toLocaleString()}</span> : null}
+                          {lead.expected_value ? <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary-600)' }}>EGP {lead.expected_value.toLocaleString()}</span> : null}
                         </div>
                       </div>
                     ))}
@@ -309,7 +277,7 @@ export default function SalesPipeline({ addToast }) {
                         {lead.priority}
                       </span>
                     </td>
-                    <td style={{ fontWeight: 600 }}>{lead.expected_value ? '$' + lead.expected_value.toLocaleString() : '-'}</td>
+                    <td style={{ fontWeight: 600 }}>{lead.expected_value ? 'EGP ' + lead.expected_value.toLocaleString() : '-'}</td>
                     <td style={{ color: 'var(--text-tertiary)' }}>{lead.expected_close_date ? new Date(lead.expected_close_date).toLocaleDateString() : '-'}</td>
                     <td style={{ color: 'var(--text-tertiary)' }}>{lead.assigned_to || '-'}</td>
                   </tr>
@@ -353,7 +321,7 @@ export default function SalesPipeline({ addToast }) {
           </div>
           <div className="form-row">
             <div className="form-group">
-              <label>Expected Value ($)</label>
+              <label>Expected Value (EGP)</label>
               <input className="form-input" type="number" placeholder="0.00" value={form.expected_value} onChange={e => setForm({ ...form, expected_value: e.target.value })} />
             </div>
             <div className="form-group">
@@ -449,7 +417,7 @@ export default function SalesPipeline({ addToast }) {
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                       <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', fontWeight: 600 }}>Value</span>
                       <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                        {activeLead.expected_value ? '$' + activeLead.expected_value.toLocaleString() : '-'}
+                        {activeLead.expected_value ? 'EGP ' + activeLead.expected_value.toLocaleString() : '-'}
                       </span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
@@ -482,7 +450,7 @@ export default function SalesPipeline({ addToast }) {
                           <strong>{activeLead.quotations.quote_number}</strong>
                           <span className="badge" style={{ fontSize: '0.68rem', marginLeft: 4 }}>{activeLead.quotations.status}</span>
                         </span>
-                        <span style={{ fontWeight: 700 }}>${(activeLead.quotations.total || 0).toLocaleString()}</span>
+                        <span style={{ fontWeight: 700 }}>EGP {(activeLead.quotations.total || 0).toLocaleString()}</span>
                       </div>
                       <div style={{ display: 'flex', gap: 5 }}>
                         <button className="btn btn-secondary" style={{ flex: 1, padding: '4px', fontSize: '0.75rem' }} onClick={() => navigate('/quotations')}>View</button>
@@ -493,7 +461,7 @@ export default function SalesPipeline({ addToast }) {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                       <select className="form-input" style={{ fontSize: '0.78rem', padding: '5px 8px' }} value="" onChange={e => linkQuote(e.target.value)}>
                         <option value="">Link existing quote...</option>
-                        {quotes.map(q => <option key={q.id} value={q.id}>{q.quote_number} - ${q.total}</option>)}
+                        {quotes.map(q => <option key={q.id} value={q.id}>{q.quote_number} - EGP {q.total}</option>)}
                       </select>
                       <button className="btn btn-secondary" style={{ fontSize: '0.78rem', padding: '5px' }} onClick={() => { setActiveLead(null); navigate('/quotations') }}>
                         <Plus size={12} /> Create New Quote
@@ -514,7 +482,7 @@ export default function SalesPipeline({ addToast }) {
                           <strong>{activeLead.invoices.invoice_number}</strong>
                           <span className="badge" style={{ fontSize: '0.68rem', marginLeft: 4 }}>{activeLead.invoices.status}</span>
                         </span>
-                        <span style={{ fontWeight: 700 }}>${(activeLead.invoices.total_amount || 0).toLocaleString()}</span>
+                        <span style={{ fontWeight: 700 }}>EGP {(activeLead.invoices.total_amount || 0).toLocaleString()}</span>
                       </div>
                       <div style={{ display: 'flex', gap: 5 }}>
                         <button className="btn btn-secondary" style={{ flex: 1, padding: '4px', fontSize: '0.75rem' }} onClick={() => navigate('/invoices')}>View</button>
@@ -525,7 +493,7 @@ export default function SalesPipeline({ addToast }) {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                       <select className="form-input" style={{ fontSize: '0.78rem', padding: '5px 8px' }} value="" onChange={e => linkInvoice(e.target.value)}>
                         <option value="">Link existing invoice...</option>
-                        {invoices.map(i => <option key={i.id} value={i.id}>{i.invoice_number} - ${i.total_amount}</option>)}
+                        {invoices.map(i => <option key={i.id} value={i.id}>{i.invoice_number} - EGP {i.total_amount}</option>)}
                       </select>
                       <button className="btn btn-secondary" style={{ fontSize: '0.78rem', padding: '5px' }} onClick={() => { setActiveLead(null); navigate('/invoices') }}>
                         <Plus size={12} /> Create New Invoice
@@ -630,43 +598,6 @@ export default function SalesPipeline({ addToast }) {
           </div>
         </div>
       )}
-
-      {/* CONFIGURE STAGES MODAL */}
-      <Modal isOpen={showStagesModal} onClose={() => setShowStagesModal(false)} title="Configure Pipeline Stages">
-        <div className="modal-body">
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)', marginBottom: 'var(--space-md)' }}>
-            Use arrows to reorder. Stages with active leads cannot be deleted.
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {stageEdits.filter(s => !s._delete).map((s, i) => (
-              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', borderLeft: '4px solid ' + s.color }}>
-                <GripVertical size={14} style={{ color: 'var(--text-tertiary)', flexShrink: 0 }} />
-                <input type="color" value={s.color}
-                  onChange={e => setStageEdits(prev => prev.map((x, xi) => xi === i ? { ...x, color: e.target.value } : x))}
-                  style={{ width: 24, height: 24, border: 'none', padding: 0, borderRadius: 4, cursor: 'pointer', flexShrink: 0 }} />
-                <input className="form-input" value={s.name}
-                  onChange={e => setStageEdits(prev => prev.map((x, xi) => xi === i ? { ...x, name: e.target.value } : x))}
-                  style={{ flex: 1, padding: '4px 8px', fontSize: '0.9rem' }} />
-                <button className="btn-icon" onClick={() => moveStage(i, -1)}><ChevronUp size={14} /></button>
-                <button className="btn-icon" onClick={() => moveStage(i, 1)}><ChevronDown size={14} /></button>
-                <button className="btn-icon delete" onClick={() => {
-                  if (leads.some(l => l.status === s.name)) return addToast('"' + s.name + '" has active leads', 'error')
-                  setStageEdits(prev => prev.map((x, xi) => xi === i ? { ...x, _delete: true } : x))
-                }}>
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-          <button className="btn btn-secondary" style={{ marginTop: 12, width: '100%' }} onClick={addStageEdit}>
-            <Plus size={15} /> Add Stage
-          </button>
-        </div>
-        <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={() => setShowStagesModal(false)}>Cancel</button>
-          <button className="btn btn-primary" onClick={saveStages}>Save Changes</button>
-        </div>
-      </Modal>
 
     </div>
   )

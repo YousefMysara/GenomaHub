@@ -18,6 +18,7 @@ import OrganizationDetails from './pages/OrganizationDetails'
 import Alerts from './pages/Alerts'
 import Invoices from './pages/Invoices'
 import SalesPipeline from './pages/SalesPipeline'
+import Settings from './pages/Settings'
 import ToastContainer from './components/Toast'
 
 export default function App() {
@@ -47,6 +48,7 @@ export default function App() {
           <Route path="/alerts" element={<Alerts addToast={addToast} />} />
           <Route path="/invoices" element={<Invoices addToast={addToast} />} />
           <Route path="/sales-pipeline" element={<SalesPipeline addToast={addToast} />} />
+          <Route path="/settings" element={<Settings addToast={addToast} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

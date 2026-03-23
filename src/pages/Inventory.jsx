@@ -48,7 +48,7 @@ export default function Inventory({ addToast }) {
   const fetchInventory = async () => {
     const { data: pData, error: pErr } = await supabase
       .from('products')
-      .select('*, brands(name)')
+      .select('*, brands(name, logo_url)')
       .order('name')
     if (pErr) return console.error(pErr)
 
@@ -61,7 +61,7 @@ export default function Inventory({ addToast }) {
     let result = (pData || []).map(p => {
       const batches = (iData || []).filter(i => i.product_id === p.id)
       const total_qty = batches.filter(b => b.status === 'Available').reduce((sum, b) => sum + (b.quantity || 0), 0)
-      return { ...p, brand_name: p.brands?.name, total_qty, batches }
+      return { ...p, brand_name: p.brands?.name, brand_logo: p.brands?.logo_url, total_qty, batches }
     })
 
     setCatalogItems(result)
@@ -295,7 +295,10 @@ export default function Inventory({ addToast }) {
                     <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.name}</td>
                     <td>
                       <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--text-accent)' }}>{p.item_code}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{p.brand_name || 'Generic'}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.75rem', color: 'var(--text-tertiary)', marginTop: 2 }}>
+                        {p.brand_logo && <img src={p.brand_logo} alt={p.brand_name} style={{ width: 14, height: 14, objectFit: 'contain', borderRadius: 2 }} />}
+                        {p.brand_name || 'Generic'}
+                      </div>
                     </td>
                     <td><span className={`badge ${p.item_type === 'Instrument' ? 'badge-equipment' : 'badge-kit'}`}>{p.item_type}</span></td>
                     <td style={{ textAlign: 'center' }}>

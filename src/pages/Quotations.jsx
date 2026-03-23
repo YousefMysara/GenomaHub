@@ -281,7 +281,7 @@ export default function Quotations({ addToast }) {
     doc.setFont('helvetica', 'bold')
     doc.setTextColor(185, 28, 28)
     doc.setFontSize(22)
-    doc.text('GenomaHub', 20, 22)
+    doc.text('GENOMA', 20, 22)
     doc.setFontSize(9)
     doc.setTextColor(100, 100, 100)
     doc.text('Medical & Laboratory Equipment Solutions', 20, 30)
@@ -325,9 +325,9 @@ export default function Quotations({ addToast }) {
       li.item_code,
       li.product_name || li.name,
       li.quantity,
-      `$${parseFloat(li.quoted_price).toLocaleString()}`,
+      `EGP ${parseFloat(li.quoted_price).toLocaleString()}`,
       li.discount_percent ? `${li.discount_percent}%` : '-',
-      `$${parseFloat(li.line_total).toLocaleString()}`
+      `EGP ${parseFloat(li.line_total).toLocaleString()}`
     ])
 
     autoTable(doc, {
@@ -354,13 +354,13 @@ export default function Quotations({ addToast }) {
     doc.setFontSize(10)
     doc.setTextColor(80, 80, 80)
     doc.text(`Subtotal:`, 140, y)
-    doc.text(`$${data.subtotal?.toLocaleString()}`, 190, y, { align: 'right' })
+    doc.text(`EGP ${data.subtotal?.toLocaleString()}`, 190, y, { align: 'right' })
 
     if (data.discount_percent > 0) {
       y += 6
       doc.text(`Discount (${data.discount_percent}%):`, 140, y)
       doc.setTextColor(239, 68, 68)
-      doc.text(`-$${(data.subtotal * data.discount_percent / 100).toLocaleString()}`, 190, y, { align: 'right' })
+      doc.text(`-EGP ${(data.subtotal * data.discount_percent / 100).toLocaleString()}`, 190, y, { align: 'right' })
     }
 
     y += 8
@@ -370,7 +370,7 @@ export default function Quotations({ addToast }) {
     doc.setFontSize(12)
     doc.setTextColor(185, 28, 28)
     doc.text(`Total:`, 140, y + 3)
-    doc.text(`$${data.total?.toLocaleString()}`, 190, y + 3, { align: 'right' })
+    doc.text(`EGP ${data.total?.toLocaleString()}`, 190, y + 3, { align: 'right' })
 
     // Terms
     if (data.terms_conditions) {
@@ -393,7 +393,7 @@ export default function Quotations({ addToast }) {
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(7)
     doc.setTextColor(255, 255, 255)
-    doc.text('GenomaHub — Medical & Laboratory Equipment Solutions', 105, pageHeight - 7, { align: 'center' })
+    doc.text('GENOMA — Medical & Laboratory Equipment Solutions', 105, pageHeight - 7, { align: 'center' })
 
     doc.save(`${data.quote_number}.pdf`)
     addToast('PDF downloaded!')
@@ -456,9 +456,9 @@ export default function Quotations({ addToast }) {
                 <td style={{ fontWeight: 500 }}>{q.contact_name || '—'}</td>
                 <td style={{ color: 'var(--text-primary)' }}>{q.client_name || '—'}</td>
                 <td><span className={`badge ${getStatusClass(q.status)}`}>{q.status}</span></td>
-                <td>${q.subtotal?.toLocaleString()}</td>
+                <td>EGP {q.subtotal?.toLocaleString()}</td>
                 <td>{q.discount_percent > 0 ? `${q.discount_percent}%` : '—'}</td>
-                <td style={{ fontWeight: 700, color: 'var(--primary-700)' }}>${q.total?.toLocaleString()}</td>
+                <td style={{ fontWeight: 700, color: 'var(--primary-700)' }}>EGP {q.total?.toLocaleString()}</td>
                 <td>{q.validity_days} days</td>
                 <td>{new Date(q.created_at || q.date_created).toLocaleDateString()}</td>
                 <td>
@@ -534,7 +534,7 @@ export default function Quotations({ addToast }) {
                           <span className="item-name">{p.name}</span>
                           <span style={{ marginLeft: 8, fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{p.item_code}</span>
                         </div>
-                        <span className="item-price">${p.base_price.toLocaleString()}</span>
+                        <span className="item-price">EGP {p.base_price.toLocaleString()}</span>
                       </div>
                     ))}
                   </div>
@@ -578,7 +578,7 @@ export default function Quotations({ addToast }) {
                             onChange={e => updateLineItem(i, 'discount_percent', parseFloat(e.target.value) || 0)} />
                         </td>
                         <td style={{ fontWeight: 600, color: 'var(--primary-700)', textAlign: 'right', paddingRight: 14 }}>
-                          ${getLineTotal(li).toLocaleString()}
+                          EGP {getLineTotal(li).toLocaleString()}
                         </td>
                         <td>
                           <button className="btn-ghost btn-icon" onClick={() => removeLineItem(i)} style={{ color: 'var(--status-danger)' }}>
@@ -593,17 +593,17 @@ export default function Quotations({ addToast }) {
                 <div className="quote-summary">
                   <div className="summary-row">
                     <span style={{ color: 'var(--text-secondary)' }}>Subtotal</span>
-                    <span>${subtotal.toLocaleString()}</span>
+                    <span>EGP {subtotal.toLocaleString()}</span>
                   </div>
                   {builderForm.discount_percent > 0 && (
                     <div className="summary-row">
                       <span style={{ color: 'var(--status-danger)' }}>Discount ({builderForm.discount_percent}%)</span>
-                      <span style={{ color: 'var(--status-danger)' }}>-${discountAmount.toLocaleString()}</span>
+                      <span style={{ color: 'var(--status-danger)' }}>-EGP {discountAmount.toLocaleString()}</span>
                     </div>
                   )}
                   <div className="summary-row total">
                     <span>Total</span>
-                    <span>${total.toLocaleString()}</span>
+                    <span>EGP {total.toLocaleString()}</span>
                   </div>
                 </div>
               </div>
@@ -675,9 +675,9 @@ export default function Quotations({ addToast }) {
                         <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{li.product_name}</td>
                         <td><span className={`badge ${li.item_type === 'Equipment' ? 'badge-equipment' : 'badge-kit'}`}>{li.item_type || 'Product'}</span></td>
                         <td style={{ textAlign: 'center' }}>{li.quantity}</td>
-                        <td>${parseFloat(li.quoted_price).toLocaleString()}</td>
+                        <td>EGP {parseFloat(li.quoted_price).toLocaleString()}</td>
                         <td>{li.discount_percent > 0 ? `${li.discount_percent}%` : '—'}</td>
-                        <td style={{ fontWeight: 600, color: 'var(--primary-700)' }}>${parseFloat(li.line_total).toLocaleString()}</td>
+                        <td style={{ fontWeight: 600, color: 'var(--primary-700)' }}>EGP {parseFloat(li.line_total).toLocaleString()}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -686,17 +686,17 @@ export default function Quotations({ addToast }) {
                 <div className="quote-summary">
                   <div className="summary-row">
                     <span>Subtotal</span>
-                    <span>${showDetails.subtotal?.toLocaleString()}</span>
+                    <span>EGP {showDetails.subtotal?.toLocaleString()}</span>
                   </div>
                   {showDetails.discount_percent > 0 && (
                     <div className="summary-row">
                       <span style={{ color: 'var(--status-danger)' }}>Discount ({showDetails.discount_percent}%)</span>
-                      <span style={{ color: 'var(--status-danger)' }}>-${(showDetails.subtotal * showDetails.discount_percent / 100).toLocaleString()}</span>
+                      <span style={{ color: 'var(--status-danger)' }}>-EGP {(showDetails.subtotal * showDetails.discount_percent / 100).toLocaleString()}</span>
                     </div>
                   )}
                   <div className="summary-row total">
                     <span>Total</span>
-                    <span>${showDetails.total?.toLocaleString()}</span>
+                    <span>EGP {showDetails.total?.toLocaleString()}</span>
                   </div>
                 </div>
               </div>

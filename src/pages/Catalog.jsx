@@ -73,7 +73,7 @@ export default function Catalog({ addToast }) {
   }
 
   const fetchProducts = async () => {
-    let query = supabase.from('products').select('*, brand:brands(name)')
+    let query = supabase.from('products').select('*, brand:brands(name, logo_url)')
 
     if (category !== 'All') query = query.eq('category', category)
     if (itemType !== 'All') query = query.eq('item_type', itemType)
@@ -298,14 +298,21 @@ export default function Catalog({ addToast }) {
               }} className="row-hover">
                 <td style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-accent)', fontWeight: 600, fontSize: '0.82rem' }}>{p.item_code}</td>
                 <td style={{ color: 'var(--text-primary)', fontWeight: 500, maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</td>
-                <td>{p.brand?.name || '—'}</td>
+                <td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {p.brand?.logo_url ? (
+                      <img src={p.brand?.logo_url} alt={p.brand?.name} style={{ width: 22, height: 22, objectFit: 'contain', borderRadius: 4, background: '#fff', border: '1px solid var(--border-secondary)' }} />
+                    ) : null}
+                    <span>{p.brand?.name || '—'}</span>
+                  </div>
+                </td>
                 <td>{p.category}</td>
                 <td>
                   <span className={`badge ${p.item_type === 'Instrument' ? 'badge-equipment' : p.category === 'Software' || p.category === 'Services' ? 'badge-info' : 'badge-kit'}`}>
                     {p.item_type}
                   </span>
                 </td>
-                <td style={{ fontWeight: 600 }}>${p.base_price.toLocaleString()}</td>
+                <td style={{ fontWeight: 600 }}>EGP {p.base_price.toLocaleString()}</td>
                 <td>
                   {p.track_stock ? (
                     <span style={{ color: 'var(--status-success)', display: 'flex', alignItems: 'center', gap: 4 }}><CheckCircle size={14} /> Yes</span>
@@ -335,7 +342,7 @@ export default function Catalog({ addToast }) {
               <input className="form-input" placeholder="e.g. NGS-ILL-001" value={form.item_code} onChange={e => setForm({ ...form, item_code: e.target.value })} />
             </div>
             <div className="form-group">
-              <label>Base Price ($) *</label>
+              <label>Base Price (EGP) *</label>
               <input className="form-input" type="number" placeholder="0.00" value={form.base_price} onChange={e => setForm({ ...form, base_price: e.target.value })} />
             </div>
           </div>
