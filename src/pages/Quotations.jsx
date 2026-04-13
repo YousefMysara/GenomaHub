@@ -17,6 +17,7 @@ import Modal from '../components/Modal'
 import QuoteDetailsModal from '../components/QuoteDetailsModal'
 import { supabase } from '../lib/supabase'
 import { useLocation } from 'react-router-dom'
+import { generateQuotePDF } from '../lib/generateQuotePDF'
 
 const STATUS_OPTIONS = ['All', 'Draft', 'Sent', 'Accepted', 'Rejected']
 
@@ -253,161 +254,32 @@ export default function Quotations({ addToast }) {
   }
 
   const downloadPDF = async (quote) => {
-    // Fetch full details if needed
+    // Fetch full line items if not already loaded
     let data = quote
     if (!quote.lineItems) {
       const { data: q } = await supabase.from('quotations').select('*, clients(name, address), contacts(first_name, last_name, email, phone)').eq('id', quote.id).single()
-      
-      let primaryContact = {}
-      if (q.contacts) {
-        primaryContact = q.contacts
-      } else {
-        const { data: contacts } = await supabase.from('contacts').select('*').eq('client_id', q.client_id).order('is_primary', { ascending: false }).limit(1)
-        primaryContact = contacts?.[0] || {}
+      let primaryContact = q.contacts || {}
+      if (!q.contacts) {
+        const { data: ctcs } = await supabase.from('contacts').select('*').eq('client_id', q.client_id).order('is_primary', { ascending: false }).limit(1)
+        primaryContact = ctcs?.[0] || {}
       }
-
       const { data: lines } = await supabase.from('quote_line_items').select('*, products(name, item_code, item_type)').eq('quote_id', quote.id)
-      data = { 
-        ...q, 
-        client_name: q.clients?.name, 
-        contact_person: primaryContact.first_name ? `${primaryContact.first_name} ${primaryContact.last_name}` : '', 
-        email: primaryContact.email, 
-        address: q.clients?.address, 
-        lineItems: lines?.map(li => ({ ...li, product_name: li.products?.name, item_code: li.products?.item_code, item_type: li.products?.item_type })) || [] 
+      data = {
+        ...q,
+        client_name: q.clients?.name,
+        contact_person: primaryContact.first_name ? `${primaryContact.first_name} ${primaryContact.last_name}` : '',
+        email: primaryContact.email,
+        address: q.clients?.address,
+        lineItems: lines?.map(li => ({ ...li, product_name: li.products?.name, item_code: li.products?.item_code, item_type: li.products?.item_type })) || []
       }
     }
-
-    const { jsPDF } = await import('jspdf')
-    const autoTable = (await import('jspdf-autotable')).default
-
-    const doc = new jsPDF()
-
-    // Header — clean white with crimson accent
-    doc.setFillColor(255, 255, 255)
-    doc.rect(0, 0, 210, 45, 'F')
-    doc.setFillColor(185, 28, 28)
-    doc.rect(0, 43, 210, 2, 'F')
-
-    // Logo text
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(185, 28, 28)
-    doc.setFontSize(22)
-    doc.text('GENOMA', 20, 22)
-    doc.setFontSize(9)
-    doc.setTextColor(100, 100, 100)
-    doc.text('Medical & Laboratory Equipment Solutions', 20, 30)
-
-    // Quote Number
-    doc.setFontSize(12)
-    doc.setTextColor(27, 27, 27)
-    doc.setFont('helvetica', 'bold')
-    doc.text(data.quote_number, 190, 22, { align: 'right' })
-    doc.setFontSize(9)
-    doc.setTextColor(100, 100, 100)
-    doc.text(`Date: ${new Date(data.created_at || data.date_created).toLocaleDateString()}`, 190, 30, { align: 'right' })
-    doc.text(`Valid: ${data.validity_days} days`, 190, 36, { align: 'right' })
-
-    // Client info
-    let y = 55
-    doc.setTextColor(40, 40, 40)
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(11)
-    doc.text('Quotation For:', 20, y)
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(10)
-    y += 7
-    doc.text(data.client_name || 'N/A', 20, y)
-    if (data.contact_person) { y += 5; doc.text(`Attn: ${data.contact_person}`, 20, y) }
-    if (data.email) { y += 5; doc.text(data.email, 20, y) }
-    if (data.address) { y += 5; doc.text(data.address, 20, y) }
-
-    // Status
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(10)
-    const statusColor = { Draft: [107, 114, 128], Sent: [37, 99, 235], Accepted: [5, 150, 105], Rejected: [220, 38, 38] }
-    const sc = statusColor[data.status] || [107, 114, 128]
-    doc.setTextColor(...sc)
-    doc.text(`Status: ${data.status}`, 190, 55, { align: 'right' })
-
-    // Line items table
-    y += 12
-    const tableData = (data.lineItems || []).map((li, i) => [
-      i + 1,
-      li.item_code,
-      li.product_name || li.name,
-      li.quantity,
-      `EGP ${parseFloat(li.quoted_price).toLocaleString()}`,
-      li.discount_percent ? `${li.discount_percent}%` : '-',
-      `EGP ${parseFloat(li.line_total).toLocaleString()}`
-    ])
-
-    autoTable(doc, {
-      startY: y,
-      head: [['#', 'Code', 'Description', 'Qty', 'Unit Price', 'Disc.', 'Total']],
-      body: tableData,
-      theme: 'grid',
-      headStyles: { fillColor: [185, 28, 28], textColor: [255, 255, 255], fontSize: 8, fontStyle: 'bold' },
-      bodyStyles: { fontSize: 8, textColor: [50, 50, 50] },
-      alternateRowStyles: { fillColor: [245, 247, 250] },
-      columnStyles: {
-        0: { halign: 'center', cellWidth: 10 },
-        3: { halign: 'center', cellWidth: 15 },
-        4: { halign: 'right', cellWidth: 25 },
-        5: { halign: 'center', cellWidth: 15 },
-        6: { halign: 'right', cellWidth: 25 }
-      },
-      margin: { left: 20, right: 20 }
-    })
-
-    // Totals
-    y = doc.lastAutoTable.finalY + 10
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(10)
-    doc.setTextColor(80, 80, 80)
-    doc.text(`Subtotal:`, 140, y)
-    doc.text(`EGP ${data.subtotal?.toLocaleString()}`, 190, y, { align: 'right' })
-
-    if (data.discount_percent > 0) {
-      y += 6
-      doc.text(`Discount (${data.discount_percent}%):`, 140, y)
-      doc.setTextColor(239, 68, 68)
-      doc.text(`-EGP ${(data.subtotal * data.discount_percent / 100).toLocaleString()}`, 190, y, { align: 'right' })
+    try {
+      await generateQuotePDF(data)
+      addToast('PDF downloaded!')
+    } catch (err) {
+      console.error('PDF error:', err)
+      addToast('Failed to generate PDF', 'error')
     }
-
-    y += 8
-    doc.setDrawColor(185, 28, 28)
-    doc.line(135, y - 2, 190, y - 2)
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(12)
-    doc.setTextColor(185, 28, 28)
-    doc.text(`Total:`, 140, y + 3)
-    doc.text(`EGP ${data.total?.toLocaleString()}`, 190, y + 3, { align: 'right' })
-
-    // Terms
-    if (data.terms_conditions) {
-      y += 16
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(9)
-      doc.setTextColor(40, 40, 40)
-      doc.text('Terms & Conditions:', 20, y)
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(8)
-      doc.setTextColor(100, 100, 100)
-      const lines = doc.splitTextToSize(data.terms_conditions, 170)
-      doc.text(lines, 20, y + 5)
-    }
-
-    // Footer
-    const pageHeight = doc.internal.pageSize.height
-    doc.setFillColor(185, 28, 28)
-    doc.rect(0, pageHeight - 15, 210, 15, 'F')
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(7)
-    doc.setTextColor(255, 255, 255)
-    doc.text('GENOMA — Medical & Laboratory Equipment Solutions', 105, pageHeight - 7, { align: 'center' })
-
-    doc.save(`${data.quote_number}.pdf`)
-    addToast('PDF downloaded!')
   }
 
   const getStatusClass = (status) => {
@@ -645,7 +517,6 @@ export default function Quotations({ addToast }) {
       <QuoteDetailsModal 
         showDetails={showDetails} 
         onClose={() => setShowDetails(null)} 
-        onDownloadPDF={downloadPDF} 
         onUpdateStatus={updateStatus} 
       />
     </div>

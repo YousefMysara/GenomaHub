@@ -1,7 +1,11 @@
-import { Download, Send } from 'lucide-react'
+import { useState } from 'react'
+import { Download, Send, Loader } from 'lucide-react'
 import Modal from './Modal'
+import { generateQuotePDF } from '../lib/generateQuotePDF'
 
-export default function QuoteDetailsModal({ showDetails, onClose, onDownloadPDF, onUpdateStatus }) {
+export default function QuoteDetailsModal({ showDetails, onClose, onUpdateStatus }) {
+  const [downloading, setDownloading] = useState(false)
+
   if (!showDetails) return null
 
   const getStatusClass = (status) => {
@@ -9,6 +13,18 @@ export default function QuoteDetailsModal({ showDetails, onClose, onDownloadPDF,
     if (status === 'Sent') return 'badge-info'
     if (status === 'Accepted') return 'badge-success'
     return 'badge-danger'
+  }
+
+  const handleDownload = async () => {
+    setDownloading(true)
+    try {
+      await generateQuotePDF(showDetails)
+    } catch (err) {
+      console.error('PDF generation failed:', err)
+      alert('Failed to generate PDF. Please check the console for details.')
+    } finally {
+      setDownloading(false)
+    }
   }
 
   return (
@@ -88,11 +104,10 @@ export default function QuoteDetailsModal({ showDetails, onClose, onDownloadPDF,
         )}
       </div>
       <div className="modal-footer">
-        {onDownloadPDF && (
-          <button className="btn btn-secondary" onClick={() => onDownloadPDF(showDetails)}>
-            <Download size={16} /> Download PDF
-          </button>
-        )}
+        <button className="btn btn-secondary" onClick={handleDownload} disabled={downloading}>
+          {downloading ? <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={16} />}
+          {downloading ? 'Generating...' : 'Download PDF'}
+        </button>
         {showDetails.status === 'Draft' && onUpdateStatus && (
           <button className="btn btn-primary" onClick={() => onUpdateStatus(showDetails.id, 'Sent')}>
             <Send size={16} /> Mark as Sent
