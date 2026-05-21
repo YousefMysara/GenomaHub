@@ -25,22 +25,22 @@ const navItems = [
   { path: '/settings', icon: SettingsIcon, label: 'Settings' },
 ]
 
-export default function Sidebar({ collapsed, onToggle }) {
+export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
   const location = useLocation()
 
   return (
-    <aside className={`sidebar ${collapsed ? 'sidebar-collapsed' : ''}`}>
+    <aside className={`sidebar ${collapsed ? 'sidebar-collapsed' : ''} ${mobileOpen ? 'mobile-open' : ''}`}>
       <div className="sidebar-header">
-        <div className="sidebar-logo" style={{ padding: collapsed ? '0' : '0 4px' }}>
+        <div className="sidebar-logo">
           <img
-            src={collapsed ? "https://ewrkclcpbhysgnvmnkrt.supabase.co/storage/v1/object/public/site-media/GENOMA_Icon.png" : "https://ewrkclcpbhysgnvmnkrt.supabase.co/storage/v1/object/public/site-media/GENOMA_Logo_Wide.png"}
+            className="logo-full"
+            src="https://ewrkclcpbhysgnvmnkrt.supabase.co/storage/v1/object/public/site-media/GENOMA_Logo_Wide.png"
             alt="GENOMA"
-            style={{
-              width: collapsed ? '32px' : '100%',
-              height: 'auto',
-              maxHeight: '60px',
-              objectFit: 'contain'
-            }}
+          />
+          <img
+            className="logo-icon-only"
+            src="https://ewrkclcpbhysgnvmnkrt.supabase.co/storage/v1/object/public/site-media/GENOMA_Icon.png"
+            alt="GENOMA"
           />
         </div>
       </div>
@@ -54,10 +54,11 @@ export default function Sidebar({ collapsed, onToggle }) {
               key={item.path}
               to={item.path}
               className={`nav-item ${isActive ? 'active' : ''}`}
-              title={collapsed ? item.label : undefined}
+              title={item.label}
+              onClick={() => onMobileClose && onMobileClose()}
             >
-              <Icon size={20} />
-              {!collapsed && <span>{item.label}</span>}
+              <Icon size={20} className="nav-item-icon" />
+              <span className="nav-item-text">{item.label}</span>
               {isActive && <div className="nav-indicator" />}
             </NavLink>
           )
@@ -80,7 +81,7 @@ export default function Sidebar({ collapsed, onToggle }) {
           display: flex;
           flex-direction: column;
           z-index: 100;
-          transition: width var(--transition-base);
+          transition: width var(--transition-base), transform var(--transition-base);
           box-shadow: 2px 0 8px rgba(0, 0, 0, 0.04);
         }
 
@@ -96,27 +97,33 @@ export default function Sidebar({ collapsed, onToggle }) {
         .sidebar-logo {
           display: flex;
           align-items: center;
-          gap: var(--space-sm);
-        }
-
-        .logo-icon {
-          width: 40px;
-          height: 40px;
-          border-radius: var(--radius-md);
-          background: linear-gradient(135deg, #b91c1c, #991b1b);
-          display: flex;
-          align-items: center;
           justify-content: center;
-          color: white;
-          flex-shrink: 0;
-          box-shadow: 0 4px 12px rgba(185, 28, 28, 0.2);
+          gap: var(--space-sm);
+          min-height: 40px;
         }
 
-        .logo-text {
-          font-size: 1.2rem;
-          font-weight: 800;
-          color: #1b1b1b;
-          letter-spacing: -0.02em;
+        .logo-full {
+          display: block;
+          width: 100%;
+          height: auto;
+          max-height: 40px;
+          object-fit: contain;
+        }
+
+        .logo-icon-only {
+          display: none;
+          width: 32px;
+          height: auto;
+          max-height: 40px;
+          object-fit: contain;
+        }
+
+        .sidebar-collapsed .logo-full {
+          display: none;
+        }
+
+        .sidebar-collapsed .logo-icon-only {
+          display: block;
         }
 
         .sidebar-nav {
@@ -125,6 +132,7 @@ export default function Sidebar({ collapsed, onToggle }) {
           display: flex;
           flex-direction: column;
           gap: 2px;
+          overflow-y: auto;
         }
 
         .nav-item {
@@ -167,6 +175,10 @@ export default function Sidebar({ collapsed, onToggle }) {
           padding: 11px;
         }
 
+        .sidebar-collapsed .nav-item-text {
+          display: none;
+        }
+
         .sidebar-collapsed .nav-indicator {
           left: 0;
         }
@@ -189,9 +201,62 @@ export default function Sidebar({ collapsed, onToggle }) {
           border-color: var(--border-secondary);
         }
 
-        @media (max-width: 640px) {
+        /* Responsive Styles */
+        
+        /* 1. Medium Tablets (768px - 1024px) - Auto-collapsed mode */
+        @media (min-width: 769px) and (max-width: 1024px) {
           .sidebar {
-            display: none;
+            width: var(--sidebar-collapsed) !important;
+          }
+          .logo-full {
+            display: none !important;
+          }
+          .logo-icon-only {
+            display: block !important;
+          }
+          .sidebar .nav-item {
+            justify-content: center !important;
+            padding: 11px !important;
+          }
+          .sidebar .nav-item-text {
+            display: none !important;
+          }
+          .sidebar .nav-indicator {
+            left: 0 !important;
+          }
+        }
+
+        /* 2. Small Mobile & Tablets (up to 768px) - Drawer Overlay mode */
+        @media (max-width: 768px) {
+          .sidebar {
+            transform: translateX(-100%);
+            z-index: 150;
+            top: 0;
+            bottom: 0;
+            width: var(--sidebar-width) !important;
+            box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
+          }
+          .sidebar.mobile-open {
+            transform: translateX(0) !important;
+          }
+          .sidebar-toggle {
+            display: none !important;
+          }
+          .logo-full {
+            display: block !important;
+          }
+          .logo-icon-only {
+            display: none !important;
+          }
+          .sidebar .nav-item {
+            justify-content: flex-start !important;
+            padding: 11px var(--space-md) !important;
+          }
+          .sidebar .nav-item-text {
+            display: inline !important;
+          }
+          .sidebar .nav-indicator {
+            left: 0 !important;
           }
         }
       `}</style>

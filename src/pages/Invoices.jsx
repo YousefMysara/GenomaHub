@@ -8,7 +8,7 @@
  * - Finalize flow deducts stock, sets status to Sold, and updates Location to "Sold to: [Organization]".
  */
 import { useState, useEffect, Fragment } from 'react'
-import { FileText, Plus, Search, CheckCircle, Trash2, Package, Eye } from 'lucide-react'
+import { FileText, Plus, Search, CheckCircle, Trash2, Package, Eye, Edit } from 'lucide-react'
 import Modal from '../components/Modal'
 import InvoiceDetailsModal from '../components/InvoiceDetailsModal'
 import { supabase } from '../lib/supabase'
@@ -32,11 +32,12 @@ export default function Invoices({ addToast }) {
     }
   }, [location.state])
 
-  // Create Invoice State
+  // Create / Edit Invoice State
   const [contacts, setContacts] = useState([]) // from DB
   const [allProducts, setAllProducts] = useState([])
   const [form, setForm] = useState({ contact_id: '', notes: '' })
   const [lineItems, setLineItems] = useState([])
+  const [editingInvoice, setEditingInvoice] = useState(null)
   
   // Product search for adding line items
   const [productSearch, setProductSearch] = useState('')
@@ -56,7 +57,7 @@ export default function Invoices({ addToast }) {
     if (c) setContacts(c)
 
     // Fetch products that have available inventory
-    const { data: prods } = await supabase.from('products').select('*, brands(name)').eq('track_stock', true).order('name')
+    const { data: prods } = await supabase.from('products').select('*, brands(name)').order('name')
     if (prods) {
       const { data: batches } = await supabase.from('inventory').select('*').eq('status', 'Available')
       const enriched = prods.map(p => ({
@@ -69,12 +70,69 @@ export default function Invoices({ addToast }) {
   useEffect(() => { fetchInvoices() }, [])
 
   const openCreate = () => {
+    setEditingInvoice(null)
     setForm({ contact_id: '', notes: '' })
     setLineItems([])
     setProductSearch('')
     setShowProductDropdown(false)
     fetchFormData()
     setShowModal(true)
+  }
+
+  const openEdit = async (invoice) => {
+    setEditingInvoice(invoice)
+    await fetchFormData()
+    
+    // Fetch line items for this invoice
+    const { data: lines } = await supabase
+      .from('invoice_items')
+      .select('*, products(name, item_code, item_type), inventory(lot_number, serial_number, quantity)')
+      .eq('invoice_id', invoice.id)
+      
+    const formattedLines = (lines || []).map(li => ({
+      product_id: li.product_id,
+      product_name: li.products?.name,
+      item_code: li.products?.item_code,
+      item_type: li.products?.item_type,
+      batch_id: li.inventory_id,
+      lot_or_serial: li.products?.item_type === 'Instrument' 
+        ? `SN: ${li.inventory?.serial_number || 'N/A'}` 
+        : `LOT: ${li.inventory?.lot_number || 'N/A'}`,
+      max_qty: (li.inventory?.quantity || 0) + li.quantity, 
+      quantity: li.quantity,
+      unit_price: li.unit_price || 0
+    }))
+    
+    // Automatically match the client to contact option
+    const associatedContact = contacts.find(c => c.client_id === invoice.client_id)
+    
+    setForm({
+      contact_id: associatedContact?.id || '',
+      notes: invoice.notes || ''
+    })
+    setLineItems(formattedLines)
+    setProductSearch('')
+    setShowProductDropdown(false)
+    setShowModal(true)
+  }
+
+  const deleteInvoice = async (invoice) => {
+    if (invoice.status === 'Finalized') return addToast('Cannot delete finalized invoice', 'error')
+    if (!window.confirm(`Are you sure you want to delete draft invoice ${invoice.invoice_number}?`)) return
+    
+    try {
+      const { error: itemsErr } = await supabase.from('invoice_items').delete().eq('invoice_id', invoice.id)
+      if (itemsErr) throw itemsErr
+      
+      const { error: invErr } = await supabase.from('invoices').delete().eq('id', invoice.id)
+      if (invErr) throw invErr
+      
+      addToast(`Invoice ${invoice.invoice_number} deleted successfully`)
+      fetchInvoices()
+    } catch (err) {
+      console.error(err)
+      addToast(`Failed to delete invoice: ${err.message}`, 'error')
+    }
   }
 
   const viewDetails = async (invoice) => {
@@ -114,26 +172,54 @@ export default function Invoices({ addToast }) {
     const selectedContact = contacts.find(c => c.id === form.contact_id)
     if (!selectedContact) return addToast('Invalid contact selected', 'error')
 
-    const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`
+    if (editingInvoice) {
+      // Edit mode
+      const { error: invErr } = await supabase.from('invoices').update({
+        client_id: selectedContact.client_id,
+        notes: form.notes || null,
+        total_amount: totalAmount
+      }).eq('id', editingInvoice.id)
 
-    const { data: inv, error: invErr } = await supabase.from('invoices').insert({
-      invoice_number: invoiceNumber,
-      client_id: selectedContact.client_id, // Automatically ties to the Organization
-      notes: form.notes || null,
-      total_amount: totalAmount,
-      status: 'Draft'
-    }).select().single()
+      if (invErr) { console.error(invErr); return addToast('Failed to update invoice', 'error') }
 
-    if (invErr) { console.error(invErr); return addToast('Failed to create invoice', 'error') }
+      // Clear existing invoice items
+      const { error: delErr } = await supabase.from('invoice_items').delete().eq('invoice_id', editingInvoice.id)
+      if (delErr) { console.error(delErr); return addToast('Failed to clear old items', 'error') }
 
-    const items = lineItems.map(l => ({
-      invoice_id: inv.id, inventory_id: l.batch_id, product_id: l.product_id, quantity: l.quantity, unit_price: l.unit_price
-    }))
+      // Insert new invoice items
+      const items = lineItems.map(l => ({
+        invoice_id: editingInvoice.id, inventory_id: l.batch_id, product_id: l.product_id, quantity: l.quantity, unit_price: l.unit_price
+      }))
 
-    const { error: itemErr } = await supabase.from('invoice_items').insert(items)
-    if (itemErr) { console.error(itemErr); return addToast('Failed to add line items', 'error') }
+      const { error: itemErr } = await supabase.from('invoice_items').insert(items)
+      if (itemErr) { console.error(itemErr); return addToast('Failed to update line items', 'error') }
 
-    addToast(`Invoice ${invoiceNumber} created as Draft`)
+      addToast(`Invoice ${editingInvoice.invoice_number} updated successfully`)
+      setEditingInvoice(null)
+    } else {
+      // Create mode
+      const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`
+
+      const { data: inv, error: invErr } = await supabase.from('invoices').insert({
+        invoice_number: invoiceNumber,
+        client_id: selectedContact.client_id,
+        notes: form.notes || null,
+        total_amount: totalAmount,
+        status: 'Draft'
+      }).select().single()
+
+      if (invErr) { console.error(invErr); return addToast('Failed to create invoice', 'error') }
+
+      const items = lineItems.map(l => ({
+        invoice_id: inv.id, inventory_id: l.batch_id, product_id: l.product_id, quantity: l.quantity, unit_price: l.unit_price
+      }))
+
+      const { error: itemErr } = await supabase.from('invoice_items').insert(items)
+      if (itemErr) { console.error(itemErr); return addToast('Failed to add line items', 'error') }
+
+      addToast(`Invoice ${invoiceNumber} created as Draft`)
+    }
+
     setShowModal(false)
     fetchInvoices()
   }
@@ -141,29 +227,16 @@ export default function Invoices({ addToast }) {
   const finalizeInvoice = async (invoice) => {
     if (invoice.status === 'Finalized') return
 
-    const { data: items } = await supabase.from('invoice_items').select('*').eq('invoice_id', invoice.id)
-    if (!items || items.length === 0) return addToast('No items on this invoice', 'error')
+    try {
+      const { error } = await supabase.rpc('finalize_invoice', { inv_id: invoice.id })
+      if (error) throw error
 
-    for (const item of items) {
-      const { data: batch } = await supabase.from('inventory').select('*').eq('id', item.inventory_id).single()
-      if (!batch) continue
-
-      const newQty = batch.quantity - item.quantity
-      if (newQty <= 0) {
-        // Fully sold
-        await supabase.from('inventory').update({
-          quantity: 0, status: 'Sold', location: `Sold to: ${invoice.client?.name || 'Organization'}`,
-          sold_to_client: invoice.client_id, sold_date: new Date().toISOString(), updated_at: new Date().toISOString()
-        }).eq('id', batch.id)
-      } else {
-        // Partially sold
-        await supabase.from('inventory').update({ quantity: newQty, updated_at: new Date().toISOString() }).eq('id', batch.id)
-      }
+      addToast(`Invoice ${invoice.invoice_number} finalized. Stock deducted atomically.`)
+      fetchInvoices()
+    } catch (err) {
+      console.error('Finalization error:', err)
+      addToast(`Finalization failed: ${err.message || err.details || 'Check inventory availability'}`, 'error')
     }
-
-    await supabase.from('invoices').update({ status: 'Finalized' }).eq('id', invoice.id)
-    addToast(`Invoice ${invoice.invoice_number} finalized. Stock deducted.`)
-    fetchInvoices()
   }
 
   // Filtering
@@ -221,12 +294,16 @@ export default function Invoices({ addToast }) {
                 <td style={{ fontWeight: 700, color: 'var(--primary-700)' }}>EGP {inv.total_amount?.toLocaleString()}</td>
                 <td><span className={`badge ${inv.status === 'Finalized' ? 'badge-success' : 'badge-warning'}`}>{inv.status}</span></td>
                 <td>
-                  <div className="actions-cell">
-                    <button onClick={() => viewDetails(inv)} title="View Details"><Eye size={15} /></button>
+                  <div className="actions-cell" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button onClick={() => viewDetails(inv)} title="View Details" className="btn-icon" style={{ padding: 4 }}><Eye size={15} /></button>
                     {inv.status === 'Draft' && (
-                      <button className="btn btn-primary" style={{ padding: '4px 8px', fontSize: '0.75rem', marginLeft: 8 }} onClick={() => finalizeInvoice(inv)}>
-                        <CheckCircle size={13} style={{ marginRight: 4 }}/> Finalize
-                      </button>
+                      <>
+                        <button onClick={() => openEdit(inv)} title="Edit Draft" className="btn-icon" style={{ color: 'var(--text-secondary)', padding: 4 }}><Edit size={14} /></button>
+                        <button onClick={() => deleteInvoice(inv)} title="Delete Draft" className="btn-icon" style={{ color: 'var(--status-danger)', padding: 4 }}><Trash2 size={14} /></button>
+                        <button className="btn" style={{ padding: '4px 10px', fontSize: '0.72rem', background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0', display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 600, borderRadius: 'var(--radius-sm)', marginLeft: 4 }} onClick={() => finalizeInvoice(inv)}>
+                          <CheckCircle size={13} /> Finalize
+                        </button>
+                      </>
                     )}
                   </div>
                 </td>
@@ -240,10 +317,13 @@ export default function Invoices({ addToast }) {
       <InvoiceDetailsModal 
         showDetails={showDetails} 
         onClose={() => setShowDetails(null)} 
+        onFinalize={(inv) => { setShowDetails(null); finalizeInvoice(inv) }}
+        onEdit={(inv) => { setShowDetails(null); openEdit(inv) }}
+        onDelete={(inv) => { setShowDetails(null); deleteInvoice(inv) }}
       />
 
-      {/* Create Invoice Modal */}
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Create Draft Invoice" wide>
+      {/* Create / Edit Invoice Modal */}
+      <Modal isOpen={showModal} onClose={() => { setShowModal(false); setEditingInvoice(null); }} title={editingInvoice ? `Edit Draft Invoice (${editingInvoice.invoice_number})` : "Create Draft Invoice"} wide>
         <div className="modal-body">
           <div className="form-row">
             <div className="form-group" style={{ flex: 1 }}>
@@ -272,8 +352,9 @@ export default function Invoices({ addToast }) {
                 <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, maxHeight: 250, overflowY: 'auto', background: 'var(--bg-primary)', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', marginTop: 4 }}>
                   {allProducts.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()) || p.item_code.toLowerCase().includes(productSearch.toLowerCase())).map(p => (
                     <div key={p.id}>
-                      <div style={{ padding: '6px 12px', background: 'var(--bg-secondary)', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                        {p.name} <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem' }}>({p.item_code})</span>
+                      <div style={{ padding: '6px 12px', background: 'var(--bg-secondary)', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>{p.name} <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: 'var(--text-tertiary)', marginLeft: 4 }}>({p.item_code})</span></span>
+                        <span className={`badge ${p.item_type === 'Instrument' ? 'badge-equipment' : p.item_type === 'Kit' ? 'badge-kit' : 'badge-info'}`} style={{ fontSize: '0.65rem', padding: '2px 8px' }}>{p.item_type}</span>
                       </div>
                       {p.available_batches.length === 0 ? <div style={{ padding: '6px 12px 10px', fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>No available batches</div> : null}
                       {p.available_batches.map(batch => (
@@ -325,8 +406,10 @@ export default function Invoices({ addToast }) {
           </div>
         </div>
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleCreateInvoice} disabled={lineItems.length === 0}>Create Draft Invoice</button>
+          <button className="btn btn-secondary" onClick={() => { setShowModal(false); setEditingInvoice(null); }}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleCreateInvoice} disabled={lineItems.length === 0}>
+            {editingInvoice ? "Save Changes" : "Create Draft Invoice"}
+          </button>
         </div>
       </Modal>
     </div>

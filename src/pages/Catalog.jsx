@@ -34,6 +34,7 @@ export default function Catalog({ addToast }) {
   const [products, setProducts] = useState([])
   const [brands, setBrands] = useState([])
   const [availableAccessories, setAvailableAccessories] = useState([])
+  const [rates, setRates] = useState({ USD_to_EGP: 47.50, EUR_to_EGP: 51.20 })
 
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('All')
@@ -49,7 +50,8 @@ export default function Catalog({ addToast }) {
     brand_id: '', track_stock: true, reorder_level: 5, accessories: [],
     uom: '', purity_grade: '', hazmat_class: '', power_requirements: '',
     dimensions: '', weight: '', warranty_period: '', packaging_size: '',
-    sterility: false, license_type: '', delivery_method: ''
+    sterility: false, license_type: '', delivery_method: '',
+    currency: 'EGP', original_base_price: ''
   })
 
   // Auto-open modal if navigating from Details Page
@@ -70,6 +72,20 @@ export default function Catalog({ addToast }) {
 
     const { data: aData } = await supabase.from('products').select('id, name, item_code, brand_id').neq('item_type', 'Instrument').order('name')
     if (aData) setAvailableAccessories(aData)
+
+    try {
+      const { data: sRates } = await supabase.from('settings').select('*')
+      if (sRates) {
+        const loadedRates = { USD_to_EGP: 47.50, EUR_to_EGP: 51.20 }
+        sRates.forEach(r => {
+          if (r.key === 'USD_to_EGP') loadedRates.USD_to_EGP = parseFloat(r.value) || 47.50
+          if (r.key === 'EUR_to_EGP') loadedRates.EUR_to_EGP = parseFloat(r.value) || 51.20
+        })
+        setRates(loadedRates)
+      }
+    } catch (err) {
+      console.error('Failed to load exchange rates in Catalog:', err)
+    }
   }
 
   const fetchProducts = async () => {
@@ -101,7 +117,8 @@ export default function Catalog({ addToast }) {
       brand_id: '', track_stock: true, reorder_level: 5, accessories: [],
       uom: '', purity_grade: '', hazmat_class: '', power_requirements: '',
       dimensions: '', weight: '', warranty_period: '', packaging_size: '',
-      sterility: false, license_type: '', delivery_method: ''
+      sterility: false, license_type: '', delivery_method: '',
+      currency: 'EGP', original_base_price: ''
     })
     setShowModal(true)
   }
@@ -111,7 +128,11 @@ export default function Catalog({ addToast }) {
     // We show modal immediately, then fetch additional details
     setForm({
       item_code: p.item_code, name: p.name, category: p.category, item_type: p.item_type,
-      description: p.description || '', base_price: p.base_price, datasheet_url: p.datasheet_url || '',
+      description: p.description || '', 
+      base_price: String(p.base_price || ''), 
+      currency: p.currency || 'EGP',
+      original_base_price: p.original_base_price !== null && p.original_base_price !== undefined ? String(p.original_base_price) : String(p.base_price || ''),
+      datasheet_url: p.datasheet_url || '',
       storage_conditions: p.storage_conditions || '',
       brand_id: p.brand_id || '', track_stock: p.track_stock,
       reorder_level: 5, accessories: [],
@@ -143,9 +164,15 @@ export default function Catalog({ addToast }) {
       return
     }
 
+    const calculatedBasePrice = parseFloat(form.base_price) || 0
+    const originalPrice = form.currency === 'EGP' ? calculatedBasePrice : (parseFloat(form.original_base_price) || 0)
+
     const productBody = {
       item_code: form.item_code, name: form.name, category: form.category, item_type: form.item_type,
-      description: form.description, base_price: parseFloat(form.base_price) || 0,
+      description: form.description, 
+      base_price: calculatedBasePrice,
+      currency: form.currency,
+      original_base_price: originalPrice,
       datasheet_url: form.datasheet_url, storage_conditions: form.storage_conditions,
       brand_id: form.brand_id || null, track_stock: form.track_stock,
       uom: form.uom || null, purity_grade: form.purity_grade || null,
@@ -238,7 +265,7 @@ export default function Catalog({ addToast }) {
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: 'var(--space-md)', marginBottom: 'var(--space-lg)', flexWrap: 'wrap', alignItems: 'center' }}>
+      <div className="filter-toolbar">
         <div className="table-search">
           <Search size={16} />
           <input
@@ -249,7 +276,8 @@ export default function Catalog({ addToast }) {
         </div>
 
         <select
-          style={{ padding: '8px 12px', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', background: 'var(--bg-primary)' }}
+          className="form-input"
+          style={{ width: 'auto', minWidth: '160px', padding: '8px 12px' }}
           value={brandFilter} onChange={e => setBrandFilter(e.target.value)}
         >
           <option value="All">All Brands</option>
@@ -312,7 +340,14 @@ export default function Catalog({ addToast }) {
                     {p.item_type}
                   </span>
                 </td>
-                <td style={{ fontWeight: 600 }}>EGP {p.base_price.toLocaleString()}</td>
+                <td style={{ fontWeight: 600 }}>
+                  <div>EGP {p.base_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  {p.currency && p.currency !== 'EGP' && p.original_base_price && (
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 400, marginTop: 2 }}>
+                      {p.currency === 'USD' ? '$' : '€'}{parseFloat(p.original_base_price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  )}
+                </td>
                 <td>
                   {p.track_stock ? (
                     <span style={{ color: 'var(--status-success)', display: 'flex', alignItems: 'center', gap: 4 }}><CheckCircle size={14} /> Yes</span>
@@ -342,9 +377,56 @@ export default function Catalog({ addToast }) {
               <input className="form-input" placeholder="e.g. NGS-ILL-001" value={form.item_code} onChange={e => setForm({ ...form, item_code: e.target.value })} />
             </div>
             <div className="form-group">
-              <label>Base Price (EGP) *</label>
-              <input className="form-input" type="number" placeholder="0.00" value={form.base_price} onChange={e => setForm({ ...form, base_price: e.target.value })} />
+              <label>Base Price Currency *</label>
+              <select className="form-input" value={form.currency} onChange={e => {
+                const newCurr = e.target.value;
+                setForm(prev => {
+                  let originalVal = prev.original_base_price;
+                  if (newCurr !== 'EGP' && !originalVal) {
+                    originalVal = prev.base_price;
+                  }
+                  return { ...prev, currency: newCurr, original_base_price: originalVal };
+                });
+              }}>
+                <option value="EGP">EGP - Egyptian Pound</option>
+                <option value="USD">USD - US Dollar</option>
+                <option value="EUR">EUR - Euro</option>
+              </select>
             </div>
+          </div>
+          <div className="form-row">
+            {form.currency === 'EGP' ? (
+              <div className="form-group">
+                <label>Base Price (EGP) *</label>
+                <input className="form-input" type="number" step="0.01" placeholder="0.00" value={form.base_price} onChange={e => setForm({ ...form, base_price: e.target.value, original_base_price: e.target.value })} />
+              </div>
+            ) : (
+              <>
+                <div className="form-group">
+                  <label>Original Base Price ({form.currency}) *</label>
+                  <input className="form-input" type="number" step="0.01" placeholder="0.00" value={form.original_base_price} onChange={e => {
+                    const rawVal = e.target.value;
+                    const numVal = parseFloat(rawVal) || 0;
+                    const rate = form.currency === 'USD' ? rates.USD_to_EGP : rates.EUR_to_EGP;
+                    const converted = Math.round((numVal * rate) * 100) / 100;
+                    setForm(prev => ({
+                      ...prev,
+                      original_base_price: rawVal,
+                      base_price: converted ? String(converted) : ''
+                    }));
+                  }} />
+                </div>
+                <div className="form-group" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <label style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Converted EGP Price</label>
+                  <div style={{ padding: '8px 12px', background: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', fontWeight: 600, color: 'var(--text-accent)' }}>
+                    EGP {parseFloat(form.base_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', marginTop: 4 }}>
+                    Rate: 1 {form.currency} = {form.currency === 'USD' ? rates.USD_to_EGP : rates.EUR_to_EGP} EGP
+                  </span>
+                </div>
+              </>
+            )}
           </div>
           <div className="form-group">
             <label>Product Name *</label>

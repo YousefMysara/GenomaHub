@@ -37,32 +37,42 @@ export default function Dashboard() {
         let stockValue = 0
         const stockByCategoryMap = {}
 
-        const lowStockAll = []
-        const expiringAll = []
-        const ninetyDaysFromNow = new Date()
-        ninetyDaysFromNow.setDate(ninetyDaysFromNow.getDate() + 90)
-
         inventoryData?.forEach(item => {
           const qty = item.quantity || 0
           const price = item.products?.base_price || 0
           const cat = item.products?.category || 'Other'
-          const trackStock = item.products?.track_stock !== false
           
           stockValue += qty * price
 
           if (!stockByCategoryMap[cat]) stockByCategoryMap[cat] = { category: cat, total_qty: 0, item_count: 0 }
           stockByCategoryMap[cat].total_qty += qty
           stockByCategoryMap[cat].item_count += 1
-
-          if (trackStock) {
-            if (qty <= item.reorder_level) {
-              lowStockAll.push({ ...item, name: item.products.name, item_code: item.products.item_code, item_type: item.products.item_type })
-            }
-            if (item.expiry_date && new Date(item.expiry_date) <= ninetyDaysFromNow) {
-              expiringAll.push({ ...item, name: item.products.name, item_code: item.products.item_code })
-            }
-          }
         })
+
+        // Fetch low-stock and expiring alerts directly from the database view
+        const { data: dbAlerts } = await supabase.from('v_critical_alerts').select('*')
+        
+        const lowStockAll = (dbAlerts || [])
+          .filter(item => item.alert_type === 'low_stock')
+          .map(item => ({
+            id: item.product_id,
+            name: item.product_name,
+            item_code: item.item_code,
+            item_type: item.item_type,
+            quantity: item.quantity,
+            reorder_level: item.reorder_level
+          }))
+
+        const expiringAll = (dbAlerts || [])
+          .filter(item => item.alert_type === 'expiring' || item.alert_type === 'expired')
+          .map(item => ({
+            id: item.inventory_id,
+            name: item.product_name,
+            item_code: item.item_code,
+            lot_number: item.lot_number,
+            quantity: item.quantity,
+            expiry_date: item.expiry_date
+          }))
 
         const stockByCategory = Object.values(stockByCategoryMap).sort((a,b) => b.total_qty - a.total_qty)
         const lowStockItems = lowStockAll.sort((a,b) => a.quantity - b.quantity).slice(0, 5)

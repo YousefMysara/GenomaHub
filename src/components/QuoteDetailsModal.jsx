@@ -3,7 +3,7 @@ import { Download, Send, Loader } from 'lucide-react'
 import Modal from './Modal'
 import { generateQuotePDF } from '../lib/generateQuotePDF'
 
-export default function QuoteDetailsModal({ showDetails, onClose, onUpdateStatus }) {
+export default function QuoteDetailsModal({ showDetails, onClose, onUpdateStatus, onEditDraft }) {
   const [downloading, setDownloading] = useState(false)
 
   if (!showDetails) return null
@@ -108,6 +108,11 @@ export default function QuoteDetailsModal({ showDetails, onClose, onUpdateStatus
           {downloading ? <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={16} />}
           {downloading ? 'Generating...' : 'Download PDF'}
         </button>
+        {showDetails.status === 'Draft' && onEditDraft && (
+          <button className="btn btn-secondary" onClick={() => onEditDraft(showDetails)}>
+            Edit Draft
+          </button>
+        )}
         {showDetails.status === 'Draft' && onUpdateStatus && (
           <button className="btn btn-primary" onClick={() => onUpdateStatus(showDetails.id, 'Sent')}>
             <Send size={16} /> Mark as Sent

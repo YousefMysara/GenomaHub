@@ -7,6 +7,7 @@
  */
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useState } from 'react'
+import { Menu } from 'lucide-react'
 import Sidebar from './components/Sidebar'
 import Dashboard from './pages/Dashboard'
 import Catalog from './pages/Catalog'
@@ -23,6 +24,7 @@ import ToastContainer from './components/Toast'
 
 export default function App() {
   const [collapsed, setCollapsed] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
   const [toasts, setToasts] = useState([])
 
   const addToast = (message, type = 'success') => {
@@ -35,7 +37,40 @@ export default function App() {
 
   return (
     <div className="app-layout">
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
+      {/* Sleek top navigation bar for small screen devices */}
+      <header className="mobile-header">
+        <button 
+          className="mobile-menu-btn" 
+          onClick={() => setMobileOpen(true)} 
+          title="Open Menu"
+        >
+          <Menu size={22} />
+        </button>
+        <div className="mobile-logo">
+          <img 
+            src="https://ewrkclcpbhysgnvmnkrt.supabase.co/storage/v1/object/public/site-media/GENOMA_Logo_Wide.png" 
+            alt="GENOMA" 
+            style={{ height: '32px', objectFit: 'contain' }}
+          />
+        </div>
+        <div style={{ width: 40 }} /> {/* Spacer to center align the brand logo */}
+      </header>
+
+      {/* Slide-out drawer blur overlay */}
+      {mobileOpen && (
+        <div 
+          className="sidebar-backdrop" 
+          onClick={() => setMobileOpen(false)} 
+        />
+      )}
+
+      <Sidebar 
+        collapsed={collapsed} 
+        onToggle={() => setCollapsed(!collapsed)} 
+        mobileOpen={mobileOpen}
+        onMobileClose={() => setMobileOpen(false)}
+      />
+      
       <main className={`main-content ${collapsed ? 'collapsed' : ''}`}>
         <Routes>
           <Route path="/" element={<Dashboard addToast={addToast} />} />

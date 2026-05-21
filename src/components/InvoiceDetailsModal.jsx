@@ -1,6 +1,7 @@
 import Modal from './Modal'
+import { CheckCircle, Trash2, Edit } from 'lucide-react'
 
-export default function InvoiceDetailsModal({ showDetails, onClose }) {
+export default function InvoiceDetailsModal({ showDetails, onClose, onFinalize, onEdit, onDelete }) {
   if (!showDetails) return null
 
   return (
@@ -68,8 +69,27 @@ export default function InvoiceDetailsModal({ showDetails, onClose }) {
           </div>
         </div>
       </div>
-      <div className="modal-footer">
-        <button className="btn btn-secondary" onClick={onClose}>Close</button>
+      <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {showDetails.status === 'Draft' && onDelete && onEdit && (
+            <>
+              <button className="btn" style={{ background: 'var(--status-danger-bg, #fee2e2)', color: 'var(--status-danger-text, #b91c1c)', border: '1px solid var(--status-danger-border, #fecaca)', display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }} onClick={() => onDelete(showDetails)}>
+                <Trash2 size={14} /> Delete Draft
+              </button>
+              <button className="btn btn-secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={() => onEdit(showDetails)}>
+                <Edit size={14} /> Edit Invoice
+              </button>
+            </>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {showDetails.status === 'Draft' && onFinalize && (
+            <button className="btn" style={{ background: '#22c55e', color: '#fff', border: '1px solid #16a34a', display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }} onClick={() => onFinalize(showDetails)}>
+              <CheckCircle size={14} /> Finalize Invoice
+            </button>
+          )}
+          <button className="btn btn-secondary" onClick={onClose}>Close</button>
+        </div>
       </div>
     </Modal>
   )

@@ -205,55 +205,57 @@ export default function Inventory({ addToast }) {
 
   return (
     <div className="animate-fade-in">
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <h1>Inventory Management</h1>
-          <p>Track stock levels, shipments, lots, and serial numbers in real time</p>
+      <div className="page-header">
+        <div className="page-header-row">
+          <div>
+            <h1>Inventory Management</h1>
+            <p>Track stock levels, shipments, lots, and serial numbers in real time</p>
+          </div>
+          <button className="btn btn-primary" onClick={openReceiveStock}>
+            <Plus size={18} /> Receive Stock
+          </button>
         </div>
-        <button className="btn btn-primary" onClick={openReceiveStock}>
-          <Plus size={18} /> Receive Stock
-        </button>
       </div>
 
       {/* ── Filters ── */}
-      <div style={{ display: 'flex', gap: 'var(--space-md)', marginBottom: 'var(--space-lg)', flexWrap: 'wrap', alignItems: 'center', background: 'var(--bg-secondary)', padding: 'var(--space-md)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-primary)' }}>
+      <div className="filter-toolbar" style={{ background: 'var(--bg-secondary)', padding: 'var(--space-md)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-primary)' }}>
         {/* Search */}
-        <div className="table-search" style={{ flex: '1 1 250px', margin: 0 }}>
+        <div className="table-search" style={{ flex: '1 1 200px', margin: 0, width: 'auto' }}>
           <Search size={16} />
           <input placeholder="Search products, lot #, serial #..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
 
         {/* Type filter */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flex: '1 1 140px' }}>
           <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>TYPE</span>
-          <select className="form-input" style={{ width: 140, padding: '7px 10px', fontSize: '0.85rem' }} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+          <select className="form-input" style={{ width: '100%', padding: '7px 10px', fontSize: '0.85rem' }} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
             {TYPE_FILTERS.map(t => <option key={t} value={t}>{t === 'All' ? 'All Types' : t}</option>)}
           </select>
         </div>
 
         {/* Brand filter */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flex: '1 1 140px' }}>
           <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>BRAND</span>
-          <select className="form-input" style={{ width: 140, padding: '7px 10px', fontSize: '0.85rem' }} value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)}>
+          <select className="form-input" style={{ width: '100%', padding: '7px 10px', fontSize: '0.85rem' }} value={brandFilter} onChange={(e) => setBrandFilter(e.target.value)}>
             {AVAILABLE_BRANDS.map(b => <option key={b} value={b}>{b === 'All' ? 'All Brands' : b}</option>)}
           </select>
         </div>
 
         {/* Stock filter */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flex: '1 1 120px' }}>
           <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-tertiary)' }}>STOCK</span>
-          <select className="form-input" style={{ width: 120, padding: '7px 10px', fontSize: '0.85rem' }} value={stockFilter} onChange={(e) => setStockFilter(e.target.value)}>
+          <select className="form-input" style={{ width: '100%', padding: '7px 10px', fontSize: '0.85rem' }} value={stockFilter} onChange={(e) => setStockFilter(e.target.value)}>
              {STOCK_FILTERS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
         </div>
 
-        <div style={{ width: 1, height: 24, background: 'var(--border-secondary)', margin: '0 4px' }} />
+        <div className="mobile-hide-separator" style={{ width: 1, height: 24, background: 'var(--border-secondary)', margin: '0 4px' }} />
 
         {/* Inactive toggle */}
         <button
           className={`btn-ghost ${showInactive ? 'active' : ''}`}
           onClick={() => setShowInactive(!showInactive)}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', color: showInactive ? 'var(--status-warning)' : 'var(--text-secondary)' }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: '0.85rem', color: showInactive ? 'var(--status-warning)' : 'var(--text-secondary)', flex: '1 1 auto' }}
         >
           {showInactive ? <Eye size={16} /> : <EyeOff size={16} />}
           {showInactive ? 'Hide Expired/Removed/Sold' : 'Show Expired/Removed/Sold'}
@@ -350,7 +352,7 @@ export default function Inventory({ addToast }) {
                     <tr style={{ background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-primary)' }}>
                       <td></td>
                       <td colSpan="7" style={{ padding: '0 var(--space-md) var(--space-md)' }}>
-                        <div style={{ background: 'var(--bg-primary)', borderRadius: 'var(--radius-md)', padding: 'var(--space-md)', border: '1px solid var(--border-primary)' }}>
+                        <div style={{ background: 'var(--bg-primary)', borderRadius: 'var(--radius-md)', padding: 'var(--space-md)', border: '1px solid var(--border-primary)', overflowX: 'auto' }}>
                           {(() => {
                             const activeBatches = showInactive
                               ? p.batches

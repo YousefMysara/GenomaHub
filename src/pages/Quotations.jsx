@@ -11,7 +11,7 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   FileText, Plus, Search, Eye, Trash2, Download,
-  Send, CheckCircle, XCircle, ChevronDown
+  Send, CheckCircle, XCircle, ChevronDown, Edit2
 } from 'lucide-react'
 import Modal from '../components/Modal'
 import QuoteDetailsModal from '../components/QuoteDetailsModal'
@@ -27,6 +27,7 @@ export default function Quotations({ addToast }) {
   const [statusFilter, setStatusFilter] = useState('All')
   const [showBuilder, setShowBuilder] = useState(false)
   const [showDetails, setShowDetails] = useState(null)
+  const [editingQuoteId, setEditingQuoteId] = useState(null)
   const location = useLocation()
 
   useEffect(() => {
@@ -83,7 +84,7 @@ export default function Quotations({ addToast }) {
   useEffect(() => {
     // Fetch contacts with nested client info
     supabase.from('contacts').select('id, first_name, last_name, client_id, clients(name)').order('first_name').then(({data}) => setContacts(data || []))
-    supabase.from('products').select('id, name, item_code, base_price, item_type').order('name').then(({data}) => setProducts(data || []))
+    supabase.from('products').select('id, name, item_code, base_price, currency, original_base_price, item_type').order('name').then(({data}) => setProducts(data || []))
   }, [])
 
   // Close dropdown on outside click
@@ -137,6 +138,42 @@ export default function Quotations({ addToast }) {
   const discountAmount = subtotal * (builderForm.discount_percent || 0) / 100
   const total = subtotal - discountAmount
 
+  const openEditQuote = async (quote) => {
+    setEditingQuoteId(quote.id)
+    setBuilderForm({
+      contact_id: quote.contact_id || '',
+      validity_days: quote.validity_days || 30,
+      terms_conditions: quote.terms_conditions || 'Standard delivery and installation terms apply. Warranty as per manufacturer guidelines.',
+      notes: quote.notes || '',
+      discount_percent: quote.discount_percent || 0
+    })
+
+    try {
+      const { data: lines, error } = await supabase
+        .from('quote_line_items')
+        .select('*, products(name, item_code, base_price)')
+        .eq('quote_id', quote.id)
+
+      if (error) throw error
+
+      if (lines) {
+        setLineItems(lines.map(li => ({
+          product_id: li.product_id,
+          product_name: li.products?.name || 'Unknown Product',
+          item_code: li.products?.item_code || '',
+          quantity: li.quantity,
+          quoted_price: li.quoted_price,
+          discount_percent: li.discount_percent || 0
+        })))
+      }
+    } catch (err) {
+      console.error('Error fetching quote lines for editing:', err)
+      addToast('Failed to load quote details', 'error')
+    }
+
+    setShowBuilder(true)
+  }
+
   const handleCreateQuote = async () => {
     if (!builderForm.contact_id) {
       addToast('Please select a contact person', 'warning')
@@ -153,29 +190,63 @@ export default function Quotations({ addToast }) {
       return
     }
 
-    const quote_number = `QT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
-    
-    // UUID bug note: builderForm.contact_id is a valid UUID, so we directly assign it.
-    // Derived client_id from selected contact.
-    const quoteData = {
-      quote_number,
-      client_id: selectedContact.client_id, 
-      contact_id: selectedContact.id,
-      status: 'Draft',
-      subtotal,
-      discount_percent: builderForm.discount_percent || 0,
-      total,
-      validity_days: builderForm.validity_days,
-      terms_conditions: builderForm.terms_conditions,
-      notes: builderForm.notes
-    }
+    let quote_number
+    let quoteId = editingQuoteId
+    let quoteError
+    let newQuote
 
-    const { data: newQuote, error: quoteError } = await supabase.from('quotations').insert([quoteData]).select().single()
+    if (editingQuoteId) {
+      const currentQuote = quotes.find(q => q.id === editingQuoteId)
+      quote_number = currentQuote ? currentQuote.quote_number : `QT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
+      
+      const quoteData = {
+        client_id: selectedContact.client_id, 
+        contact_id: selectedContact.id,
+        subtotal,
+        discount_percent: builderForm.discount_percent || 0,
+        total,
+        validity_days: builderForm.validity_days,
+        terms_conditions: builderForm.terms_conditions,
+        notes: builderForm.notes
+      }
+
+      const res = await supabase.from('quotations').update(quoteData).eq('id', editingQuoteId).select().single()
+      quoteError = res.error
+      newQuote = res.data
+    } else {
+      quote_number = `QT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
+      
+      const quoteData = {
+        quote_number,
+        client_id: selectedContact.client_id, 
+        contact_id: selectedContact.id,
+        status: 'Draft',
+        subtotal,
+        discount_percent: builderForm.discount_percent || 0,
+        total,
+        validity_days: builderForm.validity_days,
+        terms_conditions: builderForm.terms_conditions,
+        notes: builderForm.notes
+      }
+
+      const res = await supabase.from('quotations').insert([quoteData]).select().single()
+      quoteError = res.error
+      newQuote = res.data
+    }
     
     if (quoteError) {
       console.error(quoteError)
-      addToast('Failed to create quotation', 'error')
+      addToast(editingQuoteId ? 'Failed to update quotation' : 'Failed to create quotation', 'error')
       return
+    }
+
+    if (editingQuoteId) {
+      const { error: deleteError } = await supabase.from('quote_line_items').delete().eq('quote_id', editingQuoteId)
+      if (deleteError) {
+        console.error(deleteError)
+        addToast('Failed to clear old line items', 'error')
+        return
+      }
     }
 
     const lineItemsData = lineItems.map(li => ({
@@ -190,14 +261,15 @@ export default function Quotations({ addToast }) {
     const { error: lineError } = await supabase.from('quote_line_items').insert(lineItemsData)
 
     if (!lineError) {
-      addToast('Quotation created successfully!')
+      addToast(editingQuoteId ? 'Quotation updated successfully!' : 'Quotation created successfully!')
       setShowBuilder(false)
+      setEditingQuoteId(null)
       setLineItems([])
       setBuilderForm({ contact_id: '', validity_days: 30, terms_conditions: 'Standard delivery and installation terms apply. Warranty as per manufacturer guidelines.', notes: '', discount_percent: 0 })
       fetchQuotes()
     } else {
       console.error(lineError)
-      addToast('Failed to create line items', 'error')
+      addToast('Failed to save line items', 'error')
     }
   }
 
@@ -301,7 +373,7 @@ export default function Quotations({ addToast }) {
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: 'var(--space-md)', marginBottom: 'var(--space-lg)', flexWrap: 'wrap', alignItems: 'center' }}>
+      <div className="filter-toolbar">
         <div className="table-search">
           <Search size={16} />
           <input placeholder="Search quotations..." value={search} onChange={e => setSearch(e.target.value)} />
@@ -349,7 +421,10 @@ export default function Quotations({ addToast }) {
                     <button onClick={() => viewDetails(q.id)} title="View"><Eye size={15} /></button>
                     <button onClick={() => downloadPDF(q)} title="Download PDF"><Download size={15} /></button>
                     {q.status === 'Draft' && (
-                      <button onClick={() => updateStatus(q.id, 'Sent')} title="Mark as Sent"><Send size={15} /></button>
+                      <>
+                        <button onClick={() => openEditQuote(q)} title="Edit Draft"><Edit2 size={15} /></button>
+                        <button onClick={() => updateStatus(q.id, 'Sent')} title="Mark as Sent"><Send size={15} /></button>
+                      </>
                     )}
                     {q.status === 'Sent' && (
                       <>
@@ -367,7 +442,17 @@ export default function Quotations({ addToast }) {
       </div>
 
       {/* Quote Builder Modal */}
-      <Modal isOpen={showBuilder} onClose={() => setShowBuilder(false)} title="Build New Quotation" wide>
+      <Modal 
+        isOpen={showBuilder} 
+        onClose={() => { 
+          setShowBuilder(false); 
+          setEditingQuoteId(null); 
+          setLineItems([]); 
+          setBuilderForm({ contact_id: '', validity_days: 30, terms_conditions: 'Standard delivery and installation terms apply. Warranty as per manufacturer guidelines.', notes: '', discount_percent: 0 }); 
+        }} 
+        title={editingQuoteId ? "Edit Draft Quotation" : "Build New Quotation"} 
+        wide
+      >
         <div className="modal-body">
           <div className="quote-builder">
             {/* Client & Settings */}
@@ -415,6 +500,11 @@ export default function Quotations({ addToast }) {
                       <div key={p.id} className="product-search-item" onClick={() => addLineItem(p)}>
                         <div>
                           <span className="item-name">{p.name}</span>
+                          {p.currency && p.currency !== 'EGP' && p.original_base_price ? (
+                            <span style={{ marginLeft: 8, fontSize: '0.75rem', color: 'var(--primary-600)', fontWeight: 500 }}>
+                              ({p.currency === 'USD' ? '$' : '€'}{parseFloat(p.original_base_price).toLocaleString()})
+                            </span>
+                          ) : null}
                           <span style={{ marginLeft: 8, fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{p.item_code}</span>
                         </div>
                         <span className="item-price">EGP {p.base_price.toLocaleString()}</span>
@@ -427,7 +517,7 @@ export default function Quotations({ addToast }) {
 
             {/* Line Items */}
             {lineItems.length > 0 && (
-              <div style={{ border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+              <div style={{ border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-md)', overflowX: 'auto' }}>
                 <table className="line-items-table">
                   <thead>
                     <tr>
@@ -506,9 +596,14 @@ export default function Quotations({ addToast }) {
           </div>
         </div>
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={() => setShowBuilder(false)}>Cancel</button>
+          <button className="btn btn-secondary" onClick={() => { 
+            setShowBuilder(false); 
+            setEditingQuoteId(null); 
+            setLineItems([]); 
+            setBuilderForm({ contact_id: '', validity_days: 30, terms_conditions: 'Standard delivery and installation terms apply. Warranty as per manufacturer guidelines.', notes: '', discount_percent: 0 }); 
+          }}>Cancel</button>
           <button className="btn btn-primary" onClick={handleCreateQuote} disabled={lineItems.length === 0 || !builderForm.contact_id}>
-            <FileText size={16} /> Create Quotation
+            <FileText size={16} /> {editingQuoteId ? "Save Changes" : "Create Quotation"}
           </button>
         </div>
       </Modal>
@@ -518,6 +613,10 @@ export default function Quotations({ addToast }) {
         showDetails={showDetails} 
         onClose={() => setShowDetails(null)} 
         onUpdateStatus={updateStatus} 
+        onEditDraft={(q) => {
+          setShowDetails(null);
+          openEditQuote(q);
+        }}
       />
     </div>
   )

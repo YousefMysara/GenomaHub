@@ -21,6 +21,11 @@ export default function Settings({ addToast }) {
   const [stageEdits, setStageEdits] = useState([])
   const [loadingStages, setLoadingStages] = useState(true)
 
+  // -- FX SHIELD / GENERAL STATE
+  const [fxRates, setFxRates] = useState({ USD_to_EGP: '47.50', EUR_to_EGP: '51.20' })
+  const [savingFx, setSavingFx] = useState(false)
+  const [syncingCatalog, setSyncingCatalog] = useState(false)
+
   const loadData = async () => {
     // Load Brands
     setLoadingBrands(true)
@@ -36,6 +41,21 @@ export default function Settings({ addToast }) {
       setStageEdits(JSON.parse(JSON.stringify(sData)))
     }
     setLoadingStages(false)
+
+    // Load FX Rates from settings
+    try {
+      const { data: sRates } = await supabase.from('settings').select('*')
+      if (sRates) {
+        const rates = { USD_to_EGP: '47.50', EUR_to_EGP: '51.20' }
+        sRates.forEach(r => {
+          if (r.key === 'USD_to_EGP') rates.USD_to_EGP = r.value
+          if (r.key === 'EUR_to_EGP') rates.EUR_to_EGP = r.value
+        })
+        setFxRates(rates)
+      }
+    } catch (err) {
+      console.error('Error loading FX settings:', err)
+    }
   }
 
   useEffect(() => { loadData() }, [])
@@ -165,6 +185,82 @@ export default function Settings({ addToast }) {
       ;[arr[i], arr[j]] = [arr[j], arr[i]]
     arr.forEach((s, idx) => { s.position = idx })
     setStageEdits(arr)
+  }
+
+  const handleSaveFxRates = async () => {
+    try {
+      setSavingFx(true)
+      const updates = [
+        { key: 'USD_to_EGP', value: String(parseFloat(fxRates.USD_to_EGP) || 47.50) },
+        { key: 'EUR_to_EGP', value: String(parseFloat(fxRates.EUR_to_EGP) || 51.20) }
+      ]
+      const { error } = await supabase.from('settings').upsert(updates)
+      if (error) throw error
+      addToast('Exchange rates saved successfully')
+    } catch (err) {
+      console.error(err)
+      addToast('Failed to save exchange rates', 'error')
+    } finally {
+      setSavingFx(false)
+    }
+  }
+
+  const handleSyncCatalog = async () => {
+    try {
+      setSyncingCatalog(true)
+      // Fetch latest settings rates to be absolutely sure
+      const { data: sRates } = await supabase.from('settings').select('*')
+      const rates = { USD_to_EGP: 47.50, EUR_to_EGP: 51.20 }
+      if (sRates) {
+        sRates.forEach(r => {
+          if (r.key === 'USD_to_EGP') rates.USD_to_EGP = parseFloat(r.value) || 47.50
+          if (r.key === 'EUR_to_EGP') rates.EUR_to_EGP = parseFloat(r.value) || 51.20
+        })
+      }
+
+      // Fetch all products that have non-EGP currencies
+      const { data: prods, error: prodErr } = await supabase
+        .from('products')
+        .select('id, currency, original_base_price, name')
+        .neq('currency', 'EGP')
+      
+      if (prodErr) throw prodErr
+
+      if (!prods || prods.length === 0) {
+        addToast('No foreign currency products found to sync')
+        return
+      }
+
+      let updatedCount = 0
+      for (const p of prods) {
+        const basePrice = p.original_base_price
+        if (basePrice === null || basePrice === undefined) continue
+
+        let rate = 1.0
+        if (p.currency === 'USD') rate = rates.USD_to_EGP
+        else if (p.currency === 'EUR') rate = rates.EUR_to_EGP
+
+        const newEgpPrice = Math.round((basePrice * rate) * 100) / 100
+
+        const { error: updateErr } = await supabase
+          .from('products')
+          .update({ base_price: newEgpPrice })
+          .eq('id', p.id)
+
+        if (updateErr) {
+          console.error(`Failed to update price for ${p.name}:`, updateErr)
+        } else {
+          updatedCount++
+        }
+      }
+
+      addToast(`Successfully synced ${updatedCount} foreign catalog products!`)
+    } catch (err) {
+      console.error(err)
+      addToast('Catalog sync failed: ' + err.message, 'error')
+    } finally {
+      setSyncingCatalog(false)
+    }
   }
 
   return (
@@ -304,7 +400,75 @@ export default function Settings({ addToast }) {
           </div>
         )}
         
-        {activeTab !== 'brands' && activeTab !== 'pipeline' && (
+        {activeTab === 'general' && (
+          <div style={{ maxWidth: 640 }}>
+            <div style={{ marginBottom: 20 }}>
+              <h2 style={{ fontSize: '1.2rem', fontWeight: 700 }}>General Settings & FX Shield</h2>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-tertiary)', marginTop: 4 }}>
+                Configure multi-currency settings, default Egyptian Pound (EGP) conversion multipliers, and shield active catalog profit margins.
+              </p>
+            </div>
+
+            <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              <div>
+                <h3 className="section-title" style={{ fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, border: 'none', padding: 0 }}>
+                  <Globe size={18} style={{ color: 'var(--primary-700)' }} /> Exchange Rates Configuration
+                </h3>
+                <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: 16 }}>
+                  Define the default exchange rate multiplier used to compute live EGP prices from native USD or EUR catalog items.
+                </p>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>USD to EGP Rate *</label>
+                    <input
+                      className="form-input"
+                      type="number"
+                      step="0.01"
+                      placeholder="47.50"
+                      value={fxRates.USD_to_EGP}
+                      onChange={e => setFxRates({ ...fxRates, USD_to_EGP: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>EUR to EGP Rate *</label>
+                    <input
+                      className="form-input"
+                      type="number"
+                      step="0.01"
+                      placeholder="51.20"
+                      value={fxRates.EUR_to_EGP}
+                      onChange={e => setFxRates({ ...fxRates, EUR_to_EGP: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                  <button className="btn btn-primary" onClick={handleSaveFxRates} disabled={savingFx}>
+                    {savingFx ? 'Saving...' : 'Save Exchange Rates'}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ borderTop: '1px solid var(--border-primary)', paddingTop: 20 }}>
+                <h3 className="section-title" style={{ fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, border: 'none', padding: 0 }}>
+                  <Building2 size={18} style={{ color: 'var(--primary-700)' }} /> Sync Catalog Prices (FX Shield Pipeline)
+                </h3>
+                <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: 16 }}>
+                  Recalculate and update the EGP <code>base_price</code> of all products configured with a native foreign base price (USD or EUR) inside the Catalog. This protects profit margins when local currency rates fluctuate.
+                </p>
+                <div style={{ background: 'var(--bg-primary)', padding: 16, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-primary)', fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: 16 }}>
+                  <strong>Important:</strong> Clicking sync will perform a bulk recalculation inside the database. It does not modify manually priced EGP products.
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button className="btn btn-primary" onClick={handleSyncCatalog} disabled={syncingCatalog}>
+                    {syncingCatalog ? 'Syncing Catalog...' : '🔁 Sync Catalog Prices'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'users' && (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-tertiary)' }}>
             This section is under construction.
           </div>

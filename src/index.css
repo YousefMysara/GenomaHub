@@ -1029,52 +1029,223 @@ textarea.form-input {
   font-size: 0.82rem;
 }
 
-/* --- Responsive --- */
+/* --- Mobile & Responsive Styling --- */
+
+/* Mobile header styling - hidden on desktop */
+.mobile-header {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--border-primary);
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-md);
+  z-index: 120;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.mobile-menu-btn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-primary);
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+.mobile-menu-btn:hover {
+  background: var(--bg-tertiary);
+}
+
+.mobile-logo img {
+  display: block;
+}
+
+/* Backdrop drawer overlay on mobile */
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 140;
+  animation: fadeIn var(--transition-fast) ease-out;
+}
+
+/* Custom Scrollbar styling for Sidebar Nav */
+.sidebar-nav::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: var(--radius-full);
+}
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* Responsive Breakpoints */
+
+/* 1. Medium Tablets & Laptops (up to 1024px) */
 @media (max-width: 1024px) {
   .main-content {
-    margin-left: var(--sidebar-collapsed);
-    padding: var(--space-lg);
+    margin-left: var(--sidebar-collapsed) !important;
+    padding: var(--space-lg) !important;
   }
 
   .grid-2, .grid-3 {
-    grid-template-columns: 1fr;
-  }
-
-  .form-row, .form-row-3 {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
+    gap: var(--space-md) !important;
   }
 
   .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, 1fr) !important;
   }
 }
 
-@media (max-width: 640px) {
+/* 2. Small Tablets & Phones (up to 768px) */
+@media (max-width: 768px) {
+  .mobile-header {
+    display: flex;
+  }
+
   .main-content {
-    margin-left: 0;
-    padding: var(--space-md);
+    margin-left: 0 !important;
+    padding: var(--space-md) !important;
+    padding-top: 76px !important; /* spacing below fixed mobile header */
+    padding-bottom: var(--space-2xl) !important;
   }
 
   .stats-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
   }
 
   .page-header-row {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: var(--space-sm) !important;
+  }
+
+  .page-header h1 {
+    font-size: 1.6rem !important;
   }
 
   .table-toolbar {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: var(--space-sm) !important;
   }
 
   .table-search {
-    max-width: 100%;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .filter-chip {
+    padding: 6px 12px !important;
+    font-size: 0.8rem !important;
+  }
+
+  .form-row, .form-row-3 {
+    grid-template-columns: 1fr !important;
+    gap: var(--space-sm) !important;
   }
 
   .modal-content {
-    margin: var(--space-md);
-    max-height: 90vh;
+    margin: var(--space-sm) !important;
+    max-height: 92vh !important;
+    border-radius: var(--radius-lg) !important;
+  }
+
+  .modal-body {
+    padding: var(--space-md) !important;
+  }
+
+  .modal-footer {
+    padding: var(--space-md) !important;
+  }
+
+  /* Secure responsive table behaviors */
+  .table-container {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    border-radius: var(--radius-md) !important;
+  }
+
+  .data-table th, .data-table td {
+    padding: 10px 12px !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* Kanban Lead cards responsive wrap */
+  .kanban-board {
+    overflow-x: auto !important;
+    gap: var(--space-sm) !important;
+    padding-bottom: var(--space-md) !important;
+  }
+
+  .kanban-column {
+    min-width: 260px !important;
+    max-width: 280px !important;
   }
 }
+
+/* 3. Small Mobile Phones (up to 480px) */
+@media (max-width: 480px) {
+  .btn {
+    padding: 8px 14px !important;
+    font-size: 0.8rem !important;
+  }
+
+  .page-header h1 {
+    font-size: 1.4rem !important;
+  }
+
+  .modal-footer {
+    flex-direction: column-reverse !important;
+    gap: 8px !important;
+  }
+
+  .modal-footer button {
+    width: 100% !important;
+  }
+}
+
+/* --- Additional Responsive Layout Utilities --- */
+.filter-toolbar {
+  display: flex;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .filter-toolbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: var(--space-sm) !important;
+  }
+  .filter-toolbar > * {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .filter-toolbar .filters-row {
+    justify-content: flex-start;
+  }
+  .mobile-hide-separator {
+    display: none !important;
+  }
+}
+
+

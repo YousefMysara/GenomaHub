@@ -26,29 +26,62 @@ export default function Alerts() {
   const [inventory, setInventory] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('lowstock')
+  const fetchAlerts = async () => {
+    try {
+      setLoading(true)
+      const { data: dbAlerts, error } = await supabase.from('v_critical_alerts').select('*')
+      if (error) throw error
+
+      // Extract low stock alerts
+      const lowStock = (dbAlerts || [])
+        .filter(item => item.alert_type === 'low_stock')
+        .map(item => ({
+          id: item.product_id,
+          name: item.product_name,
+          item_code: item.item_code,
+          item_type: item.item_type,
+          quantity: item.quantity,
+          reorder_level: item.reorder_level
+        }))
+
+      // Extract expiring alerts
+      const expiring = (dbAlerts || [])
+        .filter(item => item.alert_type === 'expiring' || item.alert_type === 'expired')
+        .map(item => ({
+          id: item.inventory_id,
+          name: item.product_name,
+          item_code: item.item_code,
+          lot_number: item.lot_number,
+          quantity: item.quantity,
+          expiry_date: item.expiry_date,
+          urgency: item.urgency
+        }))
+
+      setAlerts({ lowStock, expiring })
+
+      // Fetch active/available inventory with base price for valuation calculation
+      const { data: invData, error: invError } = await supabase
+        .from('inventory')
+        .select('*, product:products(name, category, base_price)')
+        .eq('status', 'Available')
+      if (invError) throw invError
+
+      const valuationInventory = (invData || []).map(i => ({
+        id: i.id,
+        quantity: i.quantity,
+        category: i.product?.category,
+        base_price: i.product?.base_price || 0
+      }))
+      setInventory(valuationInventory)
+
+    } catch (err) {
+      console.error('Error fetching alerts & valuation:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const fetchAlerts = async () => {
-      try {
-        const { data, error } = await supabase.from('inventory').select('*, products!inner(*)')
-        if (error) throw error
-        
-        const inv = data?.map(i => ({ ...i, ...i.products, product_id: i.products.id })) || []
-        setInventory(inv)
-
-        const ninetyDaysFromNow = new Date()
-        ninetyDaysFromNow.setDate(ninetyDaysFromNow.getDate() + 90)
-
-        const lowStock = inv.filter(i => i.track_stock !== false && i.quantity <= i.reorder_level).sort((a, b) => a.quantity - b.quantity)
-        const expiring = inv.filter(i => i.track_stock !== false && i.expiry_date && new Date(i.expiry_date) <= ninetyDaysFromNow).sort((a, b) => new Date(a.expiry_date) - new Date(b.expiry_date))
-
-        setAlerts({ lowStock, expiring })
-      } catch (err) {
-        console.error('Error fetching alerts:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
     fetchAlerts()
   }, [])
 
@@ -80,9 +113,9 @@ export default function Alerts() {
   }
 
   const formatCurrency = (val) => {
-    if (val >= 1000000) return `$${(val / 1000000).toFixed(2)}M`
-    if (val >= 1000) return `$${(val / 1000).toFixed(1)}K`
-    return `$${val.toFixed(0)}`
+    if (val >= 1000000) return `EGP ${(val / 1000000).toFixed(2)}M`
+    if (val >= 1000) return `EGP ${(val / 1000).toFixed(1)}K`
+    return `EGP ${val.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
   }
 
   return (
